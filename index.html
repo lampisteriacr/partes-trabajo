@@ -306,7 +306,24 @@
 <div class="overlay" id="overlay"></div>
 <div class="sheet" id="sheet"></div>
 
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_OzhDlWEfSJgYHMrS4ssYlfq6Ddkmans",
+  authDomain: "partes-trabajo-a4442.firebaseapp.com",
+  projectId: "partes-trabajo-a4442",
+  storageBucket: "partes-trabajo-a4442.firebasestorage.app",
+  messagingSenderId: "1073176239730",
+  appId: "1:1073176239730:web:13fd46b3abdf1b3a822ceb"
+};
+const fbApp = initializeApp(firebaseConfig);
+window.fsDb = getFirestore(fbApp);
+window.fsDoc = doc;
+window.fsGetDoc = getDoc;
+window.fsSetDoc = setDoc;
+
 const STORE_KEY = 'avisos-data';
 const OPS_KEY = 'operarios-list';
 const CONFIG_KEY = 'app-config';
@@ -317,18 +334,28 @@ let currentId = null;
 let calSelectedDate = null;
 let materialesTmp = [];
 
-// ---------- storage ----------
+// ---------- storage (Firebase Firestore) ----------
+async function fsGet(key){
+  const ref = window.fsDoc(window.fsDb, 'kv', key);
+  const snap = await window.fsGetDoc(ref);
+  return snap.exists() ? snap.data().value : null;
+}
+async function fsSet(key, value){
+  const ref = window.fsDoc(window.fsDb, 'kv', key);
+  await window.fsSetDoc(ref, { value: value });
+}
 async function loadAvisos(){
   try{
-    const r = await window.storage.get(STORE_KEY, true);
-    AVISOS = r && r.value ? JSON.parse(r.value) : [];
+    const v = await fsGet(STORE_KEY);
+    AVISOS = v ? JSON.parse(v) : [];
   }catch(e){
+    console.error('No se pudieron cargar los avisos', e);
     AVISOS = [];
   }
 }
 async function saveAvisos(){
   try{
-    await window.storage.set(STORE_KEY, JSON.stringify(AVISOS), true);
+    await fsSet(STORE_KEY, JSON.stringify(AVISOS));
   }catch(e){
     console.error('No se pudo guardar', e);
     alert('No se pudo guardar. Revisa la conexión e inténtalo de nuevo.');
@@ -336,30 +363,30 @@ async function saveAvisos(){
 }
 async function loadOperarios(){
   try{
-    const r = await window.storage.get(OPS_KEY, true);
-    OPERARIOS = r && r.value ? JSON.parse(r.value) : [];
+    const v = await fsGet(OPS_KEY);
+    OPERARIOS = v ? JSON.parse(v) : [];
   }catch(e){
     OPERARIOS = [];
   }
 }
 async function saveOperarios(){
   try{
-    await window.storage.set(OPS_KEY, JSON.stringify(OPERARIOS), true);
+    await fsSet(OPS_KEY, JSON.stringify(OPERARIOS));
   }catch(e){
     console.error('No se pudo guardar operarios', e);
   }
 }
 async function loadConfig(){
   try{
-    const r = await window.storage.get(CONFIG_KEY, true);
-    CONFIG = r && r.value ? JSON.parse(r.value) : {emailFacturacion:''};
+    const v = await fsGet(CONFIG_KEY);
+    CONFIG = v ? JSON.parse(v) : {emailFacturacion:''};
   }catch(e){
     CONFIG = {emailFacturacion:''};
   }
 }
 async function saveConfig(){
   try{
-    await window.storage.set(CONFIG_KEY, JSON.stringify(CONFIG), true);
+    await fsSet(CONFIG_KEY, JSON.stringify(CONFIG));
   }catch(e){
     console.error('No se pudo guardar config', e);
   }
@@ -510,9 +537,14 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
     horas:null, materiales:[],
     creadoEn: new Date().toISOString()
   };
+  const ventanaWa = window.open('', '_blank');
   AVISOS.push(aviso);
   await saveAvisos();
-  window.open(waUrl(telefono, buildMensaje(aviso)), '_blank');
+  if(ventanaWa){
+    ventanaWa.location.href = waUrl(telefono, buildMensaje(aviso));
+  }else{
+    window.open(waUrl(telefono, buildMensaje(aviso)), '_blank');
+  }
 
   document.getElementById('f-cliente').value='';
   document.getElementById('f-telefono').value='';
@@ -941,7 +973,7 @@ document.getElementById('hoyLabel').textContent = new Date().toLocaleDateString(
     let ok = false;
     for(let i=0; i<3 && !ok; i++){
       try{
-        await window.storage.set(CONFIG_KEY, JSON.stringify(CONFIG), true);
+        await fsSet(CONFIG_KEY, JSON.stringify(CONFIG));
         ok = true;
       }catch(e){
         await new Promise(r=>setTimeout(r, 400));
