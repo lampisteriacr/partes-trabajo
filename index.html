@@ -295,6 +295,8 @@
   .sug-item:active{ background:var(--paper); }
   .sug-check{ font-size:12px; color:var(--baja); font-weight:600; display:flex; align-items:center; gap:4px; margin-top:6px; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -358,6 +360,11 @@
     <div id="cal-contenido"></div>
   </section>
 
+  <!-- REALIZADOS (últimos 15 días, visible para todos) -->
+  <section class="view" id="view-realizados">
+    <div id="lista-realizados"></div>
+  </section>
+
   <!-- ARCHIVO -->
   <section class="view" id="view-archivo">
     <input type="search" id="buscar-arch" placeholder="Buscar en archivo...">
@@ -371,6 +378,7 @@
   <button class="tab-btn active" data-view="nuevo"><span class="ic">✏️</span>Nuevo</button>
   <button class="tab-btn" data-view="pendientes"><span class="ic">📋</span>Pendientes</button>
   <button class="tab-btn" data-view="calendario"><span class="ic">📅</span>Calendario</button>
+  <button class="tab-btn" data-view="realizados"><span class="ic">✅</span>Realizados</button>
   <button class="tab-btn" data-view="archivo" id="tab-archivo" style="display:none"><span class="ic">🗄️</span>Archivo</button>
 </nav>
 
@@ -567,6 +575,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.view).classList.add('active');
     if(btn.dataset.view==='pendientes') renderPendientes();
     if(btn.dataset.view==='calendario') renderCalendario();
+    if(btn.dataset.view==='realizados') renderRealizados();
     if(btn.dataset.view==='archivo') renderArchivo();
   });
 });
@@ -840,7 +849,7 @@ function openDetalle(id){
     if(confirm('¿Eliminar este aviso definitivamente?')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
       await saveAvisos();
-      closeOverlay(); renderPendientes(); renderCalendario(); renderArchivo();
+      closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     }
   });
 }
@@ -919,7 +928,10 @@ function openFirma(id){
     materialesTmp.push({nombre:'', cantidad:1});
     renderMatList();
   });
-  document.getElementById('sig-guardar').addEventListener('click', async ()=>{
+  document.getElementById('sig-guardar').addEventListener('click', async (e)=>{
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Generando parte...';
     leerMatList();
     a.horas = parseFloat(document.getElementById('f-horas').value) || 0;
     a.materiales = materialesTmp.filter(m=>m.nombre.trim());
@@ -928,16 +940,36 @@ function openFirma(id){
     a.firma = sigCanvas.toDataURL('image/png');
     a.estado = 'terminado';
     a.terminadoEn = new Date().toISOString();
+    await generarYGuardarPDFs(a);
     await saveAvisos();
-    closeOverlay(); renderPendientes(); renderCalendario(); renderArchivo();
+    renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     if(CONFIG.emailFacturacion){
       const body = buildFacturacionTexto(a) + '\n\nDocumento: ' + parteUrl(a,'facturacion');
       const link = `mailto:${encodeURIComponent(CONFIG.emailFacturacion)}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(body)}`;
       window.location.href = link;
-    }else{
-      alert('Trabajo cerrado. No hay email de facturación configurado: ve a Archivo → Ajustes para ponerlo y que se envíe solo la próxima vez.');
     }
+    mostrarConfirmacionCierre(a);
   });
+}
+function mostrarConfirmacionCierre(a){
+  openOverlay(`
+    <div class="sheet-handle"></div>
+    <h2>✅ Trabajo cerrado — Nº${a.numero}</h2>
+    <div class="sub">${escapeHtml(a.cliente)}</div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-primary" id="conf-enviar-cliente">📤 Enviar parte al cliente</button>
+    </div>
+    <div class="fab-hint">Se abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto.</div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-outline" id="conf-enviar-factura">📤 Enviar a facturación</button>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-secondary" id="conf-cerrar">Cerrar</button>
+    </div>
+  `);
+  document.getElementById('conf-enviar-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+  document.getElementById('conf-enviar-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
+  document.getElementById('conf-cerrar').addEventListener('click', closeOverlay);
 }
 function renderMatList(){
   const cont = document.getElementById('mat-list');
@@ -1058,15 +1090,14 @@ function renderCalendario(){
 }
 
 // ---------- archivo ----------
-function renderArchivo(){
-  const q = (document.getElementById('buscar-arch').value||'').toLowerCase();
-  const cont = document.getElementById('lista-archivo');
-  let list = AVISOS.filter(a=>a.estado==='terminado');
-  if(q) list = list.filter(a => (a.cliente+a.direccion+a.trabajo).toLowerCase().includes(q));
+function renderRealizados(){
+  const cont = document.getElementById('lista-realizados');
+  const limite = Date.now() - 15*24*60*60*1000;
+  let list = AVISOS.filter(a=> a.estado==='terminado' && a.terminadoEn && new Date(a.terminadoEn).getTime() >= limite);
   list.sort((a,b)=> (b.terminadoEn||'').localeCompare(a.terminadoEn||''));
   cont.innerHTML='';
   if(list.length===0){
-    cont.innerHTML = `<div class="empty"><div class="big">🗄️</div>Aún no hay partes archivados.</div>`;
+    cont.innerHTML = `<div class="empty"><div class="big">✅</div>Sin trabajos terminados en los últimos 15 días.</div>`;
     return;
   }
   list.forEach(a=>{
@@ -1077,10 +1108,69 @@ function renderArchivo(){
       </div></div>
       <div class="meta">
         <span class="badge terminado">Terminado</span>
-        ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
+        ${a.terminadoEn? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${new Date(a.terminadoEn).toLocaleDateString('es-ES')}</span>`:''}
         ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
       </div>
     </div>`;
+  });
+  cont.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('click', ()=> openParteRealizado(c.dataset.id));
+  });
+}
+function openParteRealizado(id){
+  const a = AVISOS.find(x=>x.id===id);
+  openOverlay(`
+    <div class="sheet-handle"></div>
+    <h2>Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</h2>
+    <div class="sub">Terminado ${a.terminadoEn? '· '+new Date(a.terminadoEn).toLocaleDateString('es-ES'):''}</div>
+    <div class="kv"><b>Trabajo</b><span style="text-align:right;max-width:65%">${escapeHtml(a.trabajo)}</span></div>
+    ${a.direccion? `<div class="kv"><b>Dirección</b><span style="text-align:right;max-width:65%">${escapeHtml(a.direccion)}</span></div>`:''}
+    ${a.firma? `<div style="margin-top:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:var(--text-soft);margin-bottom:6px;font-weight:600">Firma del cliente</label><img src="${a.firma}" style="width:100%;border:1.5px solid var(--paper-line);border-radius:6px;background:#fff"></div>`:''}
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-primary" id="real-compartir">📤 Reenviar PDF al cliente</button>
+    </div>
+    <div class="fab-hint">Abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto.</div>
+  `);
+  document.getElementById('real-compartir').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+}
+function renderArchivo(){
+  const q = (document.getElementById('buscar-arch').value||'').toLowerCase();
+  const cont = document.getElementById('lista-archivo');
+  let list = AVISOS.filter(a=>a.estado==='terminado');
+  if(q) list = list.filter(a => (a.cliente+a.direccion+a.trabajo).toLowerCase().includes(q));
+  list.sort((a,b)=> (b.terminadoEn||b.fecha||'').localeCompare(a.terminadoEn||a.fecha||''));
+  cont.innerHTML='';
+  if(list.length===0){
+    cont.innerHTML = `<div class="empty"><div class="big">🗄️</div>Aún no hay partes archivados.</div>`;
+    return;
+  }
+  const grupos = {};
+  list.forEach(a=>{
+    const ref = a.fecha || (a.terminadoEn? a.terminadoEn.slice(0,10) : null);
+    const d = ref ? new Date(ref+'T00:00:00') : new Date(a.terminadoEn||Date.now());
+    const clave = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    if(!grupos[clave]) grupos[clave] = { fecha:d, items:[] };
+    grupos[clave].items.push(a);
+  });
+  const claves = Object.keys(grupos).sort().reverse();
+  claves.forEach(clave=>{
+    const g = grupos[clave];
+    const etiqueta = g.fecha.toLocaleDateString('es-ES',{month:'long', year:'numeric'});
+    const etiquetaCap = etiqueta.charAt(0).toUpperCase() + etiqueta.slice(1);
+    cont.innerHTML += `<div class="section-label">${etiquetaCap} <span class="count">${g.items.length}</span></div>`;
+    g.items.forEach(a=>{
+      cont.innerHTML += `<div class="card" data-urg="${a.urgencia}" data-id="${a.id}">
+        <div class="row1"><div>
+          <div class="cliente">Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</div>
+          <div class="trabajo">${escapeHtml(a.trabajo)}</div>
+        </div></div>
+        <div class="meta">
+          <span class="badge terminado">Terminado</span>
+          ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
+          ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
+        </div>
+      </div>`;
+    });
   });
   cont.querySelectorAll('.card').forEach(c=>{
     c.addEventListener('click', ()=> openParteArchivado(c.dataset.id));
@@ -1106,12 +1196,11 @@ function openParteArchivado(id){
     ${a.firma? `<div style="margin-top:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:var(--text-soft);margin-bottom:6px;font-weight:600">Firma del cliente</label><img src="${a.firma}" style="width:100%;border:1.5px solid var(--paper-line);border-radius:6px;background:#fff"></div>`:''}
 
     <div class="btn-row" style="margin-top:16px">
-      <a class="btn btn-primary" style="text-decoration:none" target="_blank" href="${parteUrl(a,'cliente')}">📄 Ver parte del cliente (para PDF)</a>
+      <button class="btn btn-primary" id="arch-compartir-cliente">📤 Enviar PDF al cliente</button>
     </div>
     <div class="btn-row" style="margin-top:8px">
-      <a class="btn btn-secondary" style="text-decoration:none" href="mailto:${encodeURIComponent(a.emailCliente||'')}?subject=${encodeURIComponent('Parte de trabajo Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(resumen+'\n\nDocumento: '+parteUrl(a,'cliente'))}">✉️ Enviar copia al cliente</a>
+      <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'cliente')}">👁️ Ver / volver a generar</a>
     </div>
-    ${!a.emailCliente? `<div class="fab-hint">No se guardó email del cliente: escríbelo en el correo antes de enviar.</div>`:''}
 
     <div class="section-label" style="margin-top:20px">Datos para facturar (interno)</div>
     <div class="kv"><b>Horas</b><span>${a.horas!=null?a.horas:'—'}</span></div>
@@ -1120,13 +1209,15 @@ function openParteArchivado(id){
       <span style="font-size:13.5px">${(a.materiales&&a.materiales.length)? a.materiales.map(m=>escapeHtml(m.nombre)+(m.cantidad?' ×'+escapeHtml(String(m.cantidad)):'')).join('<br>') : 'Ninguno'}</span>
     </div>
     <div class="btn-row" style="margin-top:10px">
-      <a class="btn btn-primary" style="text-decoration:none" target="_blank" href="${parteUrl(a,'facturacion')}">📄 Ver parte de facturación (para PDF)</a>
+      <button class="btn btn-primary" id="arch-compartir-factura">📤 Enviar PDF a facturación</button>
     </div>
     <div class="btn-row" style="margin-top:8px">
-      <a class="btn btn-outline" style="text-decoration:none" href="mailto:${encodeURIComponent(CONFIG.emailFacturacion||'')}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero)}&body=${encodeURIComponent(facturacion+'\n\nDocumento: '+parteUrl(a,'facturacion'))}">📤 Enviar datos de facturación</a>
+      <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'facturacion')}">👁️ Ver / volver a generar</a>
     </div>
-    <div class="fab-hint">Este correo no lleva la firma del cliente, es solo para pasarlo a factura.</div>
+    <div class="fab-hint">"Enviar PDF" abre el menú de compartir del móvil con el archivo ya adjunto (WhatsApp, correo...).</div>
   `);
+  document.getElementById('arch-compartir-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+  document.getElementById('arch-compartir-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
 }
 
 // ---------- init ----------
@@ -1148,7 +1239,7 @@ document.getElementById('landing-logo').src = 'data:image/png;base64,iVBORw0KGgo
       }
     }
   }
-  renderPendientes(); renderCalendario(); renderArchivo();
+  renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
 
   const params = new URLSearchParams(location.search);
   if(params.get('admin')==='1'){
@@ -1178,8 +1269,7 @@ function parteUrl(a, tipo){
   return location.origin + location.pathname + '?parte=' + a.id + '&tipo=' + tipo;
 }
 
-function mostrarPartePDF(a, tipo){
-  const hoja = document.getElementById('pdf-hoja');
+function buildParteHTML(a, tipo){
   const logoImg = document.getElementById('landing-logo').src;
   const cabecera = `
     <div class="top-accent"></div>
@@ -1195,7 +1285,7 @@ function mostrarPartePDF(a, tipo){
     </div>`;
 
   if(tipo==='cliente'){
-    hoja.innerHTML = cabecera + `
+    return cabecera + `
       <div class="bloque">
         <div class="lab">Sr. / Sra.</div>
         <div class="val">${escapeHtml(a.cliente)}</div>
@@ -1215,7 +1305,7 @@ function mostrarPartePDF(a, tipo){
     `;
   }else{
     const filasMat = (a.materiales||[]).map(m=>`<tr><td>${escapeHtml(m.nombre)}</td><td>${m.cantidad!=null?escapeHtml(String(m.cantidad)):''}</td></tr>`).join('');
-    hoja.innerHTML = cabecera + `
+    return cabecera + `
       <div class="bloque">
         <div class="lab">Cliente</div>
         <div class="val">${escapeHtml(a.cliente)}</div>
@@ -1236,6 +1326,90 @@ function mostrarPartePDF(a, tipo){
       <div class="foot-ribbon"><span class="ref">Nº ${a.numero||'—'} · interno</span><span class="brand">LAMPISTERÍA CR</span></div>
     `;
   }
+}
+
+// ---------- generación real de PDF (html2canvas + jsPDF) ----------
+async function renderizarHojaOculta(a, tipo){
+  const cont = document.createElement('div');
+  cont.style.position = 'fixed';
+  cont.style.left = '-9999px';
+  cont.style.top = '0';
+  cont.style.width = '480px';
+  cont.className = 'hoja';
+  cont.innerHTML = buildParteHTML(a, tipo);
+  document.body.appendChild(cont);
+  await new Promise(r=>setTimeout(r, 60));
+  return cont;
+}
+async function generarPDFBlob(a, tipo){
+  const nodo = await renderizarHojaOculta(a, tipo);
+  try{
+    const canvas = await html2canvas(nodo, {scale:2, backgroundColor:'#ffffff'});
+    const img = canvas.toDataURL('image/jpeg', 0.92);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:'pt', format:[canvas.width/2, canvas.height/2]});
+    pdf.addImage(img, 'JPEG', 0, 0, canvas.width/2, canvas.height/2);
+    return pdf.output('blob');
+  } finally {
+    nodo.remove();
+  }
+}
+function blobToBase64(blob){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onloadend = ()=> resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+async function generarYGuardarPDFs(a){
+  try{
+    const [blobCliente, blobFact] = await Promise.all([
+      generarPDFBlob(a, 'cliente'),
+      generarPDFBlob(a, 'facturacion')
+    ]);
+    a.pdfCliente = await blobToBase64(blobCliente);
+    a.pdfFacturacion = await blobToBase64(blobFact);
+  }catch(e){
+    console.error('No se pudo generar el PDF', e);
+  }
+}
+function base64ToBlob(base64){
+  const arr = base64.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while(n--) u8arr[n] = bstr.charCodeAt(n);
+  return new Blob([u8arr], {type:mime});
+}
+async function compartirPDF(a, tipo){
+  const base64 = tipo==='cliente' ? a.pdfCliente : a.pdfFacturacion;
+  if(!base64){ alert('Aún no se ha generado el PDF de este parte.'); return; }
+  const blob = base64ToBlob(base64);
+  const nombre = `parte-${a.numero}-${tipo}.pdf`;
+  const file = new File([blob], nombre, {type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({
+        files:[file],
+        title: 'Parte de trabajo Nº'+a.numero,
+        text: tipo==='cliente' ? `Parte de trabajo — ${a.cliente}` : `Facturación — Parte Nº${a.numero}`
+      });
+    }catch(e){ /* cancelado por el usuario, no pasa nada */ }
+  }else{
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = nombre;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    alert('Tu navegador no permite compartir directamente: se ha descargado el PDF, adjúntalo a mano en WhatsApp o email.');
+  }
+}
+
+function mostrarPartePDF(a, tipo){
+  const hoja = document.getElementById('pdf-hoja');
+  hoja.innerHTML = buildParteHTML(a, tipo);
   document.getElementById('view-pdf').classList.add('active');
 }
 
