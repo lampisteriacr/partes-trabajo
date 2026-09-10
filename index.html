@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Partes de trabajo</title>
+<style>
+  :root{
+    --graphite:#1C2128;
+    --graphite-2:#262C35;
+    --paper:#F7F4EC;
+    --paper-line:#E4DFCF;
+    --steel:#445064;
+    --steel-light:#7A879C;
+    --copper:#C97A2B;
+    --copper-dark:#A6631F;
+    --urgente:#B23A2E;
+    --normal:#D9A02B;
+    --baja:#4B7F52;
+    --text:#22262C;
+    --text-soft:#5B6270;
+    --radius:6px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--graphite);}
+  body{
+    font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+    color:var(--text);
+    display:flex; flex-direction:column;
+    min-height:100vh;
+  }
+  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;}
+
+  header.topbar{
+    background:var(--graphite);
+    color:var(--paper);
+    padding:14px 16px 12px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    border-bottom:3px solid var(--copper);
+  }
+  header.topbar h1{
+    font-size:17px; margin:0; font-weight:600; letter-spacing:0.2px;
+  }
+  header.topbar .n{
+    font-size:12px; color:var(--steel-light); font-family:"IBM Plex Mono",monospace;
+  }
+
+  main{flex:1; overflow-y:auto; background:var(--paper); padding-bottom:78px;}
+  .view{display:none; padding:14px 14px 24px;}
+  .view.active{display:block;}
+
+  /* ---- form ---- */
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.6px;
+    color:var(--text-soft); margin-bottom:5px; font-weight:600;
+  }
+  .field input[type=text], .field input[type=tel], .field input[type=date],
+  .field input[type=time], .field input[type=email], .field textarea{
+    width:100%; padding:11px 12px; border:1.5px solid var(--paper-line);
+    border-radius:var(--radius); font-size:15px; background:#fff; color:var(--text);
+    font-family:inherit;
+  }
+  .field textarea{min-height:70px; resize:vertical;}
+  .field input:focus, .field textarea:focus{outline:2px solid var(--copper); outline-offset:1px; border-color:var(--copper);}
+
+  .urg-picker{display:flex; gap:8px;}
+  .urg-btn{
+    flex:1; padding:11px 4px; text-align:center; border-radius:var(--radius);
+    border:1.5px solid var(--paper-line); background:#fff; font-size:13px; font-weight:600;
+    color:var(--text-soft); cursor:pointer;
+  }
+  .urg-btn[data-u="alta"].active{background:var(--urgente); border-color:var(--urgente); color:#fff;}
+  .urg-btn[data-u="media"].active{background:var(--normal); border-color:var(--normal); color:#2b2200;}
+  .urg-btn[data-u="baja"].active{background:var(--baja); border-color:var(--baja); color:#fff;}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    padding:13px 16px; border-radius:var(--radius); border:none;
+    font-size:15px; font-weight:600; cursor:pointer; width:100%;
+    font-family:inherit;
+  }
+  .btn-primary{background:var(--copper); color:#fff;}
+  .btn-primary:active{background:var(--copper-dark);}
+  .btn-secondary{background:var(--graphite); color:var(--paper);}
+  .btn-outline{background:#fff; color:var(--steel); border:1.5px solid var(--paper-line);}
+  .btn-danger{background:#fff; color:var(--urgente); border:1.5px solid var(--urgente);}
+  .btn-row{display:flex; gap:8px; margin-top:6px;}
+  .btn-row .btn{flex:1;}
+
+  /* ---- cards / list ---- */
+  .card{
+    background:#fff; border:1.5px solid var(--paper-line); border-left-width:5px;
+    border-radius:var(--radius); padding:12px 13px; margin-bottom:10px;
+  }
+  .card[data-urg="alta"]{border-left-color:var(--urgente);}
+  .card[data-urg="media"]{border-left-color:var(--normal);}
+  .card[data-urg="baja"]{border-left-color:var(--baja);}
+  .card .row1{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+  .card .cliente{font-weight:700; font-size:15px;}
+  .card .trabajo{color:var(--text-soft); font-size:13.5px; margin-top:3px; line-height:1.4;}
+  .card .meta{display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; align-items:center;}
+  .badge{
+    font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;
+    padding:3px 7px; border-radius:3px; font-family:"IBM Plex Mono",monospace;
+  }
+  .badge.pendiente{background:#EFE9DA; color:var(--steel);}
+  .badge.asignado{background:#F3E0C4; color:var(--copper-dark);}
+  .badge.terminado{background:#DEEBDF; color:var(--baja);}
+  .maplink{
+    font-size:12.5px; color:var(--steel); text-decoration:none; display:inline-flex; align-items:center; gap:3px;
+  }
+  .empty{
+    text-align:center; padding:50px 20px; color:var(--text-soft);
+  }
+  .empty .big{font-size:34px; margin-bottom:8px;}
+  .section-label{
+    font-size:12px; text-transform:uppercase; letter-spacing:0.6px; font-weight:700;
+    color:var(--steel); margin:18px 0 8px; display:flex; align-items:center; gap:8px;
+  }
+  .section-label:first-child{margin-top:0;}
+  .section-label .count{
+    background:var(--graphite); color:var(--paper); font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px; padding:1px 6px; border-radius:8px;
+  }
+
+  /* ---- calendar ---- */
+  .day-scroll{display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px;}
+  .day-chip{
+    flex:0 0 auto; min-width:56px; text-align:center; padding:9px 6px; border-radius:var(--radius);
+    background:#fff; border:1.5px solid var(--paper-line); cursor:pointer;
+  }
+  .day-chip.active{background:var(--graphite); border-color:var(--graphite); color:var(--paper);}
+  .day-chip .dow{font-size:10px; text-transform:uppercase; opacity:.7;}
+  .day-chip .dnum{font-size:16px; font-weight:700; font-family:"IBM Plex Mono",monospace;}
+  .day-chip .dcount{font-size:9.5px; margin-top:2px;}
+  .op-group{margin-bottom:14px;}
+  .op-name{
+    font-weight:700; font-size:13.5px; color:var(--graphite); margin-bottom:6px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .op-name::before{content:"●"; color:var(--copper); font-size:9px;}
+
+  /* ---- detail sheet ---- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(28,33,40,0.55); z-index:50; display:none;
+  }
+  .overlay.active{display:block;}
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; max-height:88vh; overflow-y:auto;
+    background:var(--paper); border-radius:16px 16px 0 0; padding:18px 16px 26px;
+    z-index:51; transform:translateY(100%); transition:transform .22s ease;
+  }
+  .sheet.active{transform:translateY(0);}
+  .sheet-handle{width:36px; height:4px; background:var(--paper-line); border-radius:2px; margin:0 auto 14px;}
+  .sheet h2{font-size:17px; margin:0 0 3px;}
+  .sheet .sub{font-size:12.5px; color:var(--text-soft); margin-bottom:14px;}
+  .kv{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--paper-line); font-size:14px;}
+  .kv b{color:var(--text-soft); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.4px;}
+
+  canvas#sigpad{
+    width:100%; height:160px; background:#fff; border:1.5px dashed var(--steel-light);
+    border-radius:var(--radius); touch-action:none;
+  }
+
+  /* ---- bottom nav ---- */
+  nav.tabbar{
+    position:fixed; bottom:0; left:0; right:0; background:var(--graphite);
+    display:flex; border-top:1px solid #000; z-index:40;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabbar button{
+    flex:1; background:none; border:none; color:var(--steel-light);
+    padding:10px 2px 8px; font-size:10.5px; font-weight:600; font-family:inherit;
+    display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  }
+  nav.tabbar button .ic{font-size:19px;}
+  nav.tabbar button.active{color:var(--copper);}
+
+  .fab-hint{font-size:12px; color:var(--text-soft); text-align:center; margin-top:10px;}
+  .op-grid{display:flex; flex-wrap:wrap; gap:8px;}
+  .op-btn{
+    padding:12px 16px; border-radius:var(--radius); border:1.5px solid var(--paper-line);
+    background:#fff; font-size:14px; font-weight:600; color:var(--text); cursor:pointer;
+    font-family:inherit;
+  }
+  .op-btn.active{background:var(--copper); border-color:var(--copper); color:#fff;}
+  .mat-row{
+    display:flex; gap:6px; align-items:center; margin-bottom:8px;
+  }
+  .mat-row input{
+    padding:10px; border:1.5px solid var(--paper-line); border-radius:var(--radius);
+    font-size:14px; font-family:inherit;
+  }
+  .mat-row .mat-nombre{flex:2; min-width:0;}
+  .mat-row .mat-cant{flex:1; min-width:0;}
+  .mat-row .mat-quitar{
+    background:none; border:none; color:var(--urgente); font-size:20px; cursor:pointer;
+    padding:0 4px; font-weight:700; line-height:1;
+  }
+  .stepper{display:flex; align-items:center; gap:10px;}
+  .stepper button{
+    width:42px; height:42px; border-radius:var(--radius); border:1.5px solid var(--paper-line);
+    background:#fff; font-size:20px; font-weight:700; cursor:pointer; color:var(--steel);
+  }
+  .stepper input{
+    flex:1; text-align:center; font-size:20px; font-weight:700; padding:9px; border:1.5px solid var(--paper-line);
+    border-radius:var(--radius); font-family:"IBM Plex Mono",monospace;
+  }
+  input[type=search]{
+    width:100%; padding:10px 12px; border:1.5px solid var(--paper-line); border-radius:var(--radius);
+    font-size:14px; margin-bottom:12px; background:#fff;
+  }
+  .sugerencias{
+    margin-top:4px; border-radius:var(--radius); overflow:hidden;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+  }
+  .sugerencias:empty{ box-shadow:none; }
+  .sug-item{
+    background:#fff; padding:10px 12px; font-size:13.5px; border-bottom:1px solid var(--paper-line);
+    cursor:pointer; line-height:1.35;
+  }
+  .sug-item:last-child{ border-bottom:none; }
+  .sug-item:active{ background:var(--paper); }
+  .sug-check{ font-size:12px; color:var(--baja); font-weight:600; display:flex; align-items:center; gap:4px; margin-top:6px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>Partes de trabajo</h1>
+  <span class="n mono" id="hoyLabel"></span>
+</header>
+
+<main>
+
+  <!-- NUEVO AVISO -->
+  <section class="view active" id="view-nuevo">
+    <div class="field">
+      <label>Cliente</label>
+      <input type="text" id="f-cliente" placeholder="Sr. / Sra. ...">
+    </div>
+    <div class="field">
+      <label>Teléfono (para WhatsApp directo, opcional)</label>
+      <input type="tel" id="f-telefono" placeholder="34600000000">
+    </div>
+    <div class="field">
+      <label>Calle y número</label>
+      <input type="text" id="f-direccion" placeholder="Ej: Carrer d'Aragó 245, Barcelona" autocomplete="off">
+      <div id="direccion-estado" style="font-size:12px;color:var(--text-soft);margin-top:4px;"></div>
+      <div id="direccion-sugerencias" class="sugerencias"></div>
+    </div>
+    <div class="field">
+      <label>Piso / puerta (opcional)</label>
+      <input type="text" id="f-piso" placeholder="Ej: 3º 2ª">
+      <a href="#" id="ver-mapa-nuevo" style="display:inline-block;margin-top:6px;font-size:12.5px;color:var(--steel);text-decoration:none;">📍 Ver en Google Maps</a>
+    </div>
+    <div class="field">
+      <label>Trabajo a realizar</label>
+      <textarea id="f-trabajo" placeholder="Describe el aviso..."></textarea>
+    </div>
+    <div class="field">
+      <label>Urgencia</label>
+      <div class="urg-picker">
+        <div class="urg-btn" data-u="alta">🔴 Urgente</div>
+        <div class="urg-btn active" data-u="media">🟡 Normal</div>
+        <div class="urg-btn" data-u="baja">🟢 Puede esperar</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Fecha prevista</label>
+      <input type="date" id="f-fecha">
+    </div>
+    <button class="btn btn-primary" id="btn-crear">Crear y enviar por WhatsApp</button>
+    <div class="fab-hint">Se guarda en el panel y se abre WhatsApp con el mensaje ya escrito.</div>
+  </section>
+
+  <!-- PENDIENTES -->
+  <section class="view" id="view-pendientes">
+    <input type="search" id="buscar-pend" placeholder="Buscar cliente o dirección...">
+    <div id="lista-pendientes"></div>
+  </section>
+
+  <!-- CALENDARIO -->
+  <section class="view" id="view-calendario">
+    <div class="day-scroll" id="day-scroll"></div>
+    <div id="cal-contenido"></div>
+  </section>
+
+  <!-- ARCHIVO -->
+  <section class="view" id="view-archivo">
+    <input type="search" id="buscar-arch" placeholder="Buscar en archivo...">
+    <div id="lista-archivo"></div>
+    <button class="btn btn-outline" id="btn-ajustes" style="margin-top:16px">⚙️ Email para facturación</button>
+  </section>
+
+</main>
+
+<nav class="tabbar">
+  <button class="tab-btn active" data-view="nuevo"><span class="ic">✏️</span>Nuevo</button>
+  <button class="tab-btn" data-view="pendientes"><span class="ic">📋</span>Pendientes</button>
+  <button class="tab-btn" data-view="calendario"><span class="ic">📅</span>Calendario</button>
+  <button class="tab-btn" data-view="archivo"><span class="ic">🗄️</span>Archivo</button>
+</nav>
+
+<div class="overlay" id="overlay"></div>
+<div class="sheet" id="sheet"></div>
+
+<script>
+const STORE_KEY = 'avisos-data';
+const OPS_KEY = 'operarios-list';
+const CONFIG_KEY = 'app-config';
+let AVISOS = [];
+let OPERARIOS = [];
+let CONFIG = {emailFacturacion:''};
+let currentId = null;
+let calSelectedDate = null;
+let materialesTmp = [];
+
+// ---------- storage ----------
+async function loadAvisos(){
+  try{
+    const r = await window.storage.get(STORE_KEY, true);
+    AVISOS = r && r.value ? JSON.parse(r.value) : [];
+  }catch(e){
+    AVISOS = [];
+  }
+}
+async function saveAvisos(){
+  try{
+    await window.storage.set(STORE_KEY, JSON.stringify(AVISOS), true);
+  }catch(e){
+    console.error('No se pudo guardar', e);
+    alert('No se pudo guardar. Revisa la conexión e inténtalo de nuevo.');
+  }
+}
+async function loadOperarios(){
+  try{
+    const r = await window.storage.get(OPS_KEY, true);
+    OPERARIOS = r && r.value ? JSON.parse(r.value) : [];
+  }catch(e){
+    OPERARIOS = [];
+  }
+}
+async function saveOperarios(){
+  try{
+    await window.storage.set(OPS_KEY, JSON.stringify(OPERARIOS), true);
+  }catch(e){
+    console.error('No se pudo guardar operarios', e);
+  }
+}
+async function loadConfig(){
+  try{
+    const r = await window.storage.get(CONFIG_KEY, true);
+    CONFIG = r && r.value ? JSON.parse(r.value) : {emailFacturacion:''};
+  }catch(e){
+    CONFIG = {emailFacturacion:''};
+  }
+}
+async function saveConfig(){
+  try{
+    await window.storage.set(CONFIG_KEY, JSON.stringify(CONFIG), true);
+  }catch(e){
+    console.error('No se pudo guardar config', e);
+  }
+}
+function buildFacturacionTexto(a){
+  const materialesTxt = (a.materiales||[]).map(m=>`- ${m.nombre}${m.cantidad?` x${m.cantidad}`:''}`).join('\n') || 'Ninguno';
+  return `FACTURAR — Parte Nº${a.numero}\n`+
+    `Cliente: ${a.cliente}\n`+
+    `Dirección: ${a.direccion||'-'}\n`+
+    `Fecha: ${a.fecha?fmtDate(a.fecha):''}\n`+
+    `Operario: ${a.operario||'-'}\n`+
+    `Horas trabajadas: ${a.horas!=null?a.horas:'-'}\n`+
+    `Materiales:\n${materialesTxt}`;
+}
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function siguienteNumero(){ return String(AVISOS.length+1).padStart(5,'0'); }
+
+// ---------- utils ----------
+function fmtDate(d){
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('es-ES', {weekday:'short', day:'2-digit', month:'short'});
+}
+function todayISO(){
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+function urgLabel(u){ return u==='alta'?'Urgente':u==='media'?'Normal':'Puede esperar'; }
+function estadoLabel(e){ return e==='pendiente'?'Pendiente':e==='asignado'?'Asignado':'Terminado'; }
+function mapsUrl(dir){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir); }
+function waUrl(tel, text){
+  const clean = (tel||'').replace(/[^0-9]/g,'');
+  const base = clean ? ('https://wa.me/'+clean) : 'https://wa.me/';
+  return base + '?text=' + encodeURIComponent(text);
+}
+function buildMensaje(a){
+  let t = `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)})\nCliente: ${a.cliente}\n`;
+  if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(a.direccion)}\n`;
+  t += `Trabajo: ${a.trabajo}\n`;
+  if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}\n`;
+  if(a.telefono) t += `Tel. cliente: ${a.telefono}`;
+  return t;
+}
+
+// ---------- tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='pendientes') renderPendientes();
+    if(btn.dataset.view==='calendario') renderCalendario();
+    if(btn.dataset.view==='archivo') renderArchivo();
+  });
+});
+
+// ---------- urgencia picker ----------
+let urgenciaActual = 'media';
+document.querySelectorAll('.urg-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.urg-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    urgenciaActual = b.dataset.u;
+  });
+});
+
+document.getElementById('ver-mapa-nuevo').addEventListener('click', (e)=>{
+  e.preventDefault();
+  const v = direccionCompleta();
+  if(!v){ alert('Escribe primero la dirección.'); return; }
+  window.open(mapsUrl(v), '_blank');
+});
+function direccionCompleta(){
+  const calle = document.getElementById('f-direccion').value.trim();
+  const piso = document.getElementById('f-piso').value.trim();
+  if(!calle) return '';
+  return piso ? `${calle}, ${piso}` : calle;
+}
+
+// ---------- autocompletar dirección (OpenStreetMap, gratis, sin clave) ----------
+let direccionValidada = false;
+let sugTimeout = null;
+const inputDireccion = document.getElementById('f-direccion');
+const cajaSugerencias = document.getElementById('direccion-sugerencias');
+const estadoDireccion = document.getElementById('direccion-estado');
+inputDireccion.addEventListener('input', ()=>{
+  direccionValidada = false;
+  const q = inputDireccion.value.trim();
+  clearTimeout(sugTimeout);
+  if(q.length < 4){ cajaSugerencias.innerHTML=''; estadoDireccion.textContent=''; return; }
+  estadoDireccion.textContent = 'Buscando...';
+  sugTimeout = setTimeout(()=> buscarDirecciones(q), 500);
+});
+async function buscarDirecciones(q){
+  try{
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=' + encodeURIComponent(q + ', España');
+    const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    if(!res.ok){
+      estadoDireccion.textContent = `El buscador respondió con error (${res.status}). Puedes escribir la dirección a mano.`;
+      cajaSugerencias.innerHTML = '';
+      return;
+    }
+    const data = await res.json();
+    if(!data || data.length===0){
+      estadoDireccion.textContent = 'Sin coincidencias — puedes seguir escribiendo a mano.';
+      cajaSugerencias.innerHTML = '';
+      return;
+    }
+    estadoDireccion.textContent = '';
+    cajaSugerencias.innerHTML = data.map((d,i)=>
+      `<div class="sug-item" data-i="${i}">${escapeHtml(d.display_name)}</div>`
+    ).join('');
+    cajaSugerencias.querySelectorAll('.sug-item').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        inputDireccion.value = data[parseInt(el.dataset.i)].display_name;
+        direccionValidada = true;
+        cajaSugerencias.innerHTML = '';
+        estadoDireccion.textContent = '';
+      });
+    });
+  }catch(e){
+    estadoDireccion.textContent = 'No se pudo conectar con el buscador de direcciones. Puedes escribir la dirección a mano.';
+    cajaSugerencias.innerHTML = '';
+  }
+}
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('#f-direccion') && !e.target.closest('#direccion-sugerencias')){
+    cajaSugerencias.innerHTML = '';
+  }
+});
+
+// ---------- crear aviso ----------
+document.getElementById('f-fecha').value = todayISO();
+document.getElementById('btn-crear').addEventListener('click', async ()=>{
+  const cliente = document.getElementById('f-cliente').value.trim();
+  const telefono = document.getElementById('f-telefono').value.trim();
+  const direccion = direccionCompleta();
+  const trabajo = document.getElementById('f-trabajo').value.trim();
+  const fecha = document.getElementById('f-fecha').value;
+  if(!cliente || !trabajo){
+    alert('Falta el cliente o la descripción del trabajo.');
+    return;
+  }
+  const aviso = {
+    id: uid(), numero: siguienteNumero(), cliente, telefono, direccion, trabajo,
+    urgencia: urgenciaActual, fecha, estado:'pendiente',
+    operario:'', firma:null, emailCliente:'', notasFinal:'',
+    horas:null, materiales:[],
+    creadoEn: new Date().toISOString()
+  };
+  AVISOS.push(aviso);
+  await saveAvisos();
+  window.open(waUrl(telefono, buildMensaje(aviso)), '_blank');
+
+  document.getElementById('f-cliente').value='';
+  document.getElementById('f-telefono').value='';
+  document.getElementById('f-direccion').value='';
+  document.getElementById('f-piso').value='';
+  document.getElementById('direccion-sugerencias').innerHTML='';
+  direccionValidada = false;
+  document.getElementById('f-trabajo').value='';
+  document.getElementById('f-fecha').value = todayISO();
+  document.querySelectorAll('.urg-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.urg-btn[data-u="media"]').classList.add('active');
+  urgenciaActual = 'media';
+});
+
+// ---------- pendientes ----------
+function ordenUrgencia(a,b){
+  const rank = {alta:0, media:1, baja:2};
+  if(rank[a.urgencia] !== rank[b.urgencia]) return rank[a.urgencia]-rank[b.urgencia];
+  return (a.fecha||'').localeCompare(b.fecha||'');
+}
+function renderPendientes(){
+  const q = (document.getElementById('buscar-pend').value||'').toLowerCase();
+  const cont = document.getElementById('lista-pendientes');
+  let list = AVISOS.filter(a=>a.estado!=='terminado');
+  if(q) list = list.filter(a => (a.cliente+a.direccion+a.trabajo).toLowerCase().includes(q));
+  list.sort(ordenUrgencia);
+  const pend = list.filter(a=>a.estado==='pendiente');
+  const asig = list.filter(a=>a.estado==='asignado');
+  cont.innerHTML='';
+  if(list.length===0){
+    cont.innerHTML = `<div class="empty"><div class="big">📭</div>Sin avisos pendientes.<br>Crea uno en la pestaña Nuevo.</div>`;
+    return;
+  }
+  if(pend.length){
+    cont.innerHTML += `<div class="section-label">Sin asignar <span class="count">${pend.length}</span></div>`;
+    pend.forEach(a=> cont.innerHTML += cardHtml(a));
+  }
+  if(asig.length){
+    cont.innerHTML += `<div class="section-label">Asignados <span class="count">${asig.length}</span></div>`;
+    asig.forEach(a=> cont.innerHTML += cardHtml(a));
+  }
+  cont.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('click', (e)=>{
+      if(e.target.closest('.maplink')) return;
+      openDetalle(c.dataset.id);
+    });
+  });
+}
+function cardHtml(a){
+  return `<div class="card" data-urg="${a.urgencia}" data-id="${a.id}">
+    <div class="row1">
+      <div><div class="cliente">Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</div>
+      <div class="trabajo">${escapeHtml(a.trabajo)}</div></div>
+    </div>
+    <div class="meta">
+      <span class="badge ${a.estado}">${estadoLabel(a.estado)}</span>
+      ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
+      ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
+      ${a.direccion? `<a class="maplink" target="_blank" href="${mapsUrl(a.direccion)}">📍 Maps</a>`:''}
+    </div>
+  </div>`;
+}
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+document.getElementById('buscar-pend').addEventListener('input', renderPendientes);
+document.getElementById('buscar-arch').addEventListener('input', renderArchivo);
+document.getElementById('btn-ajustes').addEventListener('click', async ()=>{
+  const actual = CONFIG.emailFacturacion || '';
+  const nuevo = prompt('¿A qué email se envían los datos de facturación al cerrar un trabajo?', actual);
+  if(nuevo !== null){
+    CONFIG.emailFacturacion = nuevo.trim();
+    await saveConfig();
+    alert(CONFIG.emailFacturacion ? 'Guardado. A partir de ahora se enviará automáticamente a '+CONFIG.emailFacturacion : 'Email borrado.');
+  }
+});
+
+// ---------- detalle / sheet ----------
+function openOverlay(html){
+  document.getElementById('sheet').innerHTML = html;
+  document.getElementById('overlay').classList.add('active');
+  document.getElementById('sheet').classList.add('active');
+}
+function closeOverlay(){
+  document.getElementById('overlay').classList.remove('active');
+  document.getElementById('sheet').classList.remove('active');
+}
+document.getElementById('overlay').addEventListener('click', closeOverlay);
+
+function openDetalle(id){
+  const a = AVISOS.find(x=>x.id===id);
+  if(!a) return;
+  currentId = id;
+  openOverlay(`
+    <div class="sheet-handle"></div>
+    <h2>Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</h2>
+    <div class="sub">${estadoLabel(a.estado)} · ${urgLabel(a.urgencia)}${a.fecha? ' · '+fmtDate(a.fecha):''}</div>
+    <div class="kv"><b>Trabajo</b><span style="text-align:right;max-width:65%">${escapeHtml(a.trabajo)}</span></div>
+    ${a.direccion? `<div class="kv"><b>Dirección</b><span style="text-align:right;max-width:65%">${escapeHtml(a.direccion)}</span></div>`:''}
+    ${a.telefono? `<div class="kv"><b>Teléfono</b><span>${escapeHtml(a.telefono)}</span></div>`:''}
+
+    ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(a.direccion)}">📍 Abrir en Maps</a></div>`:''}
+
+    <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">¿Quién lo hace?</label>
+      <div class="op-grid" id="op-grid"></div>
+      <button class="btn btn-outline" id="op-add" style="margin-top:8px">+ Añadir operario nuevo</button>
+    </div>
+
+    <div class="btn-row" style="margin-top:18px">
+      ${a.estado!=='terminado' ? `<button class="btn btn-secondary" id="d-terminar">Marcar terminado y firmar</button>`:''}
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-danger" id="d-borrar">Eliminar aviso</button>
+    </div>
+  `);
+  renderOpGrid(a);
+  document.getElementById('op-add').addEventListener('click', async ()=>{
+    const nombre = prompt('Nombre del nuevo operario:');
+    if(nombre && nombre.trim()){
+      const n = nombre.trim();
+      if(!OPERARIOS.includes(n)){ OPERARIOS.push(n); await saveOperarios(); }
+      a.operario = n;
+      if(a.estado==='pendiente') a.estado='asignado';
+      await saveAvisos();
+      renderOpGrid(a);
+      renderPendientes(); renderCalendario();
+    }
+  });
+  const termBtn = document.getElementById('d-terminar');
+  if(termBtn) termBtn.addEventListener('click', ()=> openFirma(id));
+  document.getElementById('d-borrar').addEventListener('click', async ()=>{
+    if(confirm('¿Eliminar este aviso definitivamente?')){
+      AVISOS = AVISOS.filter(x=>x.id!==id);
+      await saveAvisos();
+      closeOverlay(); renderPendientes(); renderCalendario(); renderArchivo();
+    }
+  });
+}
+function renderOpGrid(a){
+  const grid = document.getElementById('op-grid');
+  if(!grid) return;
+  if(OPERARIOS.length===0){
+    grid.innerHTML = `<div style="font-size:13px;color:var(--text-soft)">Aún no hay operarios. Añade el primero abajo.</div>`;
+    return;
+  }
+  grid.innerHTML = OPERARIOS.map(op=>
+    `<button class="op-btn ${a.operario===op?'active':''}" data-op="${escapeHtml(op)}">${escapeHtml(op)}</button>`
+  ).join('');
+  grid.querySelectorAll('.op-btn').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      a.operario = b.dataset.op;
+      if(a.estado==='pendiente') a.estado='asignado';
+      await saveAvisos();
+      renderOpGrid(a);
+      renderPendientes(); renderCalendario();
+    });
+  });
+}
+
+// ---------- firma ----------
+function openFirma(id){
+  const a = AVISOS.find(x=>x.id===id);
+  materialesTmp = (a.materiales && a.materiales.length) ? JSON.parse(JSON.stringify(a.materiales)) : [];
+  openOverlay(`
+    <div class="sheet-handle"></div>
+    <h2>Nº${a.numero||'—'} · Cerrar trabajo</h2>
+    <div class="sub">${escapeHtml(a.cliente)} · ${escapeHtml(a.trabajo)}</div>
+
+    <div class="section-label" style="margin-top:4px">Para facturar (uso interno)</div>
+
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:6px;font-weight:600;">Horas trabajadas</label>
+    <div class="stepper" style="margin-bottom:16px">
+      <button type="button" id="horas-menos">−</button>
+      <input type="number" id="f-horas" step="0.5" min="0" value="${a.horas!=null?a.horas:1}">
+      <button type="button" id="horas-mas">+</button>
+    </div>
+
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:6px;font-weight:600;">Materiales usados</label>
+    <div id="mat-list"></div>
+    <button class="btn btn-outline" id="mat-add" type="button">+ Añadir material</button>
+
+    <div class="section-label" style="margin-top:20px">Para el cliente</div>
+    <div class="field">
+      <label>Notas finales (opcional, se le puede enviar al cliente)</label>
+      <textarea id="f-notas" placeholder="Incidencias, recomendaciones..."></textarea>
+    </div>
+    <div class="field">
+      <label>Email del cliente (opcional, para enviarle copia)</label>
+      <input type="email" id="f-email" placeholder="cliente@email.com">
+    </div>
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:5px;font-weight:600;">Firma</label>
+    <canvas id="sigpad"></canvas>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-outline" id="sig-clear" type="button">Borrar firma</button>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-primary" id="sig-guardar">Guardar y marcar terminado</button>
+    </div>
+  `);
+  setupSigPad();
+  renderMatList();
+  document.getElementById('horas-menos').addEventListener('click', ()=>{
+    const inp = document.getElementById('f-horas');
+    inp.value = Math.max(0, (parseFloat(inp.value)||0) - 0.5);
+  });
+  document.getElementById('horas-mas').addEventListener('click', ()=>{
+    const inp = document.getElementById('f-horas');
+    inp.value = (parseFloat(inp.value)||0) + 0.5;
+  });
+  document.getElementById('mat-add').addEventListener('click', ()=>{
+    materialesTmp.push({nombre:'', cantidad:1});
+    renderMatList();
+  });
+  document.getElementById('sig-guardar').addEventListener('click', async ()=>{
+    leerMatList();
+    a.horas = parseFloat(document.getElementById('f-horas').value) || 0;
+    a.materiales = materialesTmp.filter(m=>m.nombre.trim());
+    a.notasFinal = document.getElementById('f-notas').value.trim();
+    a.emailCliente = document.getElementById('f-email').value.trim();
+    a.firma = sigCanvas.toDataURL('image/png');
+    a.estado = 'terminado';
+    a.terminadoEn = new Date().toISOString();
+    await saveAvisos();
+    closeOverlay(); renderPendientes(); renderCalendario(); renderArchivo();
+    if(CONFIG.emailFacturacion){
+      const body = buildFacturacionTexto(a);
+      const link = `mailto:${encodeURIComponent(CONFIG.emailFacturacion)}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(body)}`;
+      window.location.href = link;
+    }else{
+      alert('Trabajo cerrado. No hay email de facturación configurado: ve a Archivo → Ajustes para ponerlo y que se envíe solo la próxima vez.');
+    }
+  });
+}
+function renderMatList(){
+  const cont = document.getElementById('mat-list');
+  if(!cont) return;
+  if(materialesTmp.length===0){
+    cont.innerHTML = `<div style="font-size:13px;color:var(--text-soft);margin-bottom:10px">Sin materiales añadidos.</div>`;
+    return;
+  }
+  cont.innerHTML = materialesTmp.map((m,i)=>`
+    <div class="mat-row" data-i="${i}">
+      <input class="mat-nombre" type="text" placeholder="Material" value="${escapeHtml(m.nombre||'')}">
+      <input class="mat-cant" type="text" inputmode="decimal" placeholder="Cant." value="${m.cantidad!=null?m.cantidad:''}">
+      <button type="button" class="mat-quitar" aria-label="Quitar">×</button>
+    </div>
+  `).join('');
+  cont.querySelectorAll('.mat-row').forEach(row=>{
+    const i = parseInt(row.dataset.i);
+    row.querySelector('.mat-quitar').addEventListener('click', ()=>{
+      leerMatList();
+      materialesTmp.splice(i,1);
+      renderMatList();
+    });
+  });
+}
+function leerMatList(){
+  const cont = document.getElementById('mat-list');
+  if(!cont) return;
+  const rows = cont.querySelectorAll('.mat-row');
+  rows.forEach((row,i)=>{
+    materialesTmp[i] = {
+      nombre: row.querySelector('.mat-nombre').value,
+      cantidad: row.querySelector('.mat-cant').value
+    };
+  });
+}
+let sigCanvas, sigCtx, drawing=false;
+function setupSigPad(){
+  sigCanvas = document.getElementById('sigpad');
+  const ratio = window.devicePixelRatio || 1;
+  sigCanvas.width = sigCanvas.clientWidth * ratio;
+  sigCanvas.height = sigCanvas.clientHeight * ratio;
+  sigCtx = sigCanvas.getContext('2d');
+  sigCtx.scale(ratio, ratio);
+  sigCtx.lineWidth = 2.2;
+  sigCtx.lineCap = 'round';
+  sigCtx.strokeStyle = '#1C2128';
+  function pos(e){
+    const r = sigCanvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return {x: t.clientX - r.left, y: t.clientY - r.top};
+  }
+  function start(e){ drawing=true; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); e.preventDefault(); }
+  function move(e){ if(!drawing) return; const p=pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); e.preventDefault(); }
+  function end(){ drawing=false; }
+  sigCanvas.addEventListener('mousedown', start);
+  sigCanvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  sigCanvas.addEventListener('touchstart', start, {passive:false});
+  sigCanvas.addEventListener('touchmove', move, {passive:false});
+  sigCanvas.addEventListener('touchend', end);
+  document.getElementById('sig-clear').addEventListener('click', ()=>{
+    sigCtx.clearRect(0,0,sigCanvas.width,sigCanvas.height);
+  });
+}
+
+// ---------- calendario ----------
+function renderCalendario(){
+  const scroll = document.getElementById('day-scroll');
+  const days = [];
+  const base = new Date();
+  for(let i=0;i<14;i++){
+    const d = new Date(base); d.setDate(base.getDate()+i);
+    days.push(d.toISOString().slice(0,10));
+  }
+  if(!calSelectedDate) calSelectedDate = days[0];
+  scroll.innerHTML = days.map(d=>{
+    const count = AVISOS.filter(a=>a.fecha===d && a.estado!=='terminado').length;
+    const dt = new Date(d+'T00:00:00');
+    return `<div class="day-chip ${d===calSelectedDate?'active':''}" data-d="${d}">
+      <div class="dow">${dt.toLocaleDateString('es-ES',{weekday:'short'})}</div>
+      <div class="dnum">${dt.getDate()}</div>
+      <div class="dcount">${count?count+' aviso'+(count>1?'s':''):'—'}</div>
+    </div>`;
+  }).join('');
+  scroll.querySelectorAll('.day-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{ calSelectedDate = chip.dataset.d; renderCalendario(); });
+  });
+
+  const cont = document.getElementById('cal-contenido');
+  const dayAvisos = AVISOS.filter(a=>a.fecha===calSelectedDate && a.estado!=='terminado');
+  if(dayAvisos.length===0){
+    cont.innerHTML = `<div class="empty"><div class="big">🗓️</div>Sin trabajos programados este día.</div>`;
+    return;
+  }
+  const conOperario = {};
+  const sinOperario = [];
+  dayAvisos.forEach(a=>{
+    if(a.operario){ (conOperario[a.operario] = conOperario[a.operario]||[]).push(a); }
+    else sinOperario.push(a);
+  });
+  cont.innerHTML='';
+  Object.keys(conOperario).sort().forEach(op=>{
+    cont.innerHTML += `<div class="op-group"><div class="op-name">${escapeHtml(op)}</div>`;
+    conOperario[op].sort(ordenUrgencia).forEach(a=> cont.innerHTML += cardHtml(a));
+    cont.innerHTML += `</div>`;
+  });
+  if(sinOperario.length){
+    cont.innerHTML += `<div class="section-label">Sin asignar <span class="count">${sinOperario.length}</span></div>`;
+    sinOperario.sort(ordenUrgencia).forEach(a=> cont.innerHTML += cardHtml(a));
+  }
+  cont.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('click', (e)=>{
+      if(e.target.closest('.maplink')) return;
+      openDetalle(c.dataset.id);
+    });
+  });
+}
+
+// ---------- archivo ----------
+function renderArchivo(){
+  const q = (document.getElementById('buscar-arch').value||'').toLowerCase();
+  const cont = document.getElementById('lista-archivo');
+  let list = AVISOS.filter(a=>a.estado==='terminado');
+  if(q) list = list.filter(a => (a.cliente+a.direccion+a.trabajo).toLowerCase().includes(q));
+  list.sort((a,b)=> (b.terminadoEn||'').localeCompare(a.terminadoEn||''));
+  cont.innerHTML='';
+  if(list.length===0){
+    cont.innerHTML = `<div class="empty"><div class="big">🗄️</div>Aún no hay partes archivados.</div>`;
+    return;
+  }
+  list.forEach(a=>{
+    cont.innerHTML += `<div class="card" data-urg="${a.urgencia}" data-id="${a.id}">
+      <div class="row1"><div>
+        <div class="cliente">Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</div>
+        <div class="trabajo">${escapeHtml(a.trabajo)}</div>
+      </div></div>
+      <div class="meta">
+        <span class="badge terminado">Terminado</span>
+        ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
+        ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
+      </div>
+    </div>`;
+  });
+  cont.querySelectorAll('.card').forEach(c=>{
+    c.addEventListener('click', ()=> openParteArchivado(c.dataset.id));
+  });
+}
+function openParteArchivado(id){
+  const a = AVISOS.find(x=>x.id===id);
+  const resumen = `Parte de trabajo Nº${a.numero} — ${a.cliente}\n`+
+    `Fecha: ${a.fecha?fmtDate(a.fecha):''}\n`+
+    `Dirección: ${a.direccion||'-'}\n`+
+    `Trabajo realizado: ${a.trabajo}\n`+
+    (a.notasFinal? `Notas: ${a.notasFinal}\n`:'')+
+    `Operario: ${a.operario||'-'}\n`+
+    `Firmado por el cliente.`;
+  const facturacion = buildFacturacionTexto(a);
+  openOverlay(`
+    <div class="sheet-handle"></div>
+    <h2>Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</h2>
+    <div class="sub">Terminado ${a.terminadoEn? '· '+new Date(a.terminadoEn).toLocaleDateString('es-ES'):''}</div>
+    <div class="kv"><b>Trabajo</b><span style="text-align:right;max-width:65%">${escapeHtml(a.trabajo)}</span></div>
+    ${a.notasFinal? `<div class="kv"><b>Notas</b><span style="text-align:right;max-width:65%">${escapeHtml(a.notasFinal)}</span></div>`:''}
+    ${a.operario? `<div class="kv"><b>Operario</b><span>${escapeHtml(a.operario)}</span></div>`:''}
+    ${a.firma? `<div style="margin-top:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:var(--text-soft);margin-bottom:6px;font-weight:600">Firma del cliente</label><img src="${a.firma}" style="width:100%;border:1.5px solid var(--paper-line);border-radius:6px;background:#fff"></div>`:''}
+
+    <div class="btn-row" style="margin-top:16px">
+      <a class="btn btn-secondary" style="text-decoration:none" href="mailto:${encodeURIComponent(a.emailCliente||'')}?subject=${encodeURIComponent('Parte de trabajo Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(resumen)}">✉️ Enviar copia al cliente</a>
+    </div>
+    ${!a.emailCliente? `<div class="fab-hint">No se guardó email del cliente: escríbelo en el correo antes de enviar.</div>`:''}
+
+    <div class="section-label" style="margin-top:20px">Datos para facturar (interno)</div>
+    <div class="kv"><b>Horas</b><span>${a.horas!=null?a.horas:'—'}</span></div>
+    <div class="kv" style="border-bottom:none;flex-direction:column;align-items:flex-start;gap:4px">
+      <b>Materiales</b>
+      <span style="font-size:13.5px">${(a.materiales&&a.materiales.length)? a.materiales.map(m=>escapeHtml(m.nombre)+(m.cantidad?' ×'+escapeHtml(String(m.cantidad)):'')).join('<br>') : 'Ninguno'}</span>
+    </div>
+    <div class="btn-row" style="margin-top:10px">
+      <a class="btn btn-outline" style="text-decoration:none" href="mailto:${encodeURIComponent(CONFIG.emailFacturacion||'')}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero)}&body=${encodeURIComponent(facturacion)}">📤 Enviar datos de facturación</a>
+    </div>
+    <div class="fab-hint">Este correo no lleva la firma del cliente, es solo para pasarlo a factura.</div>
+  `);
+}
+
+// ---------- init ----------
+document.getElementById('hoyLabel').textContent = new Date().toLocaleDateString('es-ES',{day:'2-digit',month:'short'});
+(async ()=>{
+  await loadAvisos();
+  await loadOperarios();
+  await loadConfig();
+  if(!CONFIG.emailFacturacion){
+    CONFIG.emailFacturacion = 'administracion@lampisteriacr.com';
+    let ok = false;
+    for(let i=0; i<3 && !ok; i++){
+      try{
+        await window.storage.set(CONFIG_KEY, JSON.stringify(CONFIG), true);
+        ok = true;
+      }catch(e){
+        await new Promise(r=>setTimeout(r, 400));
+      }
+    }
+  }
+  renderPendientes(); renderCalendario(); renderArchivo();
+})();
+</script>
+</body>
+</html>
