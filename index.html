@@ -351,7 +351,7 @@
   <button class="tab-btn active" data-view="nuevo"><span class="ic">✏️</span>Nuevo</button>
   <button class="tab-btn" data-view="pendientes"><span class="ic">📋</span>Pendientes</button>
   <button class="tab-btn" data-view="calendario"><span class="ic">📅</span>Calendario</button>
-  <button class="tab-btn" data-view="archivo"><span class="ic">🗄️</span>Archivo</button>
+  <button class="tab-btn" data-view="archivo" id="tab-archivo" style="display:none"><span class="ic">🗄️</span>Archivo</button>
 </nav>
 
 <div class="overlay" id="overlay"></div>
@@ -748,6 +748,9 @@ function openDetalle(id){
     ${a.telefono? `<div class="kv"><b>Teléfono</b><span>${escapeHtml(a.telefono)}</span></div>`:''}
 
     ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(a.direccion)}">📍 Abrir en Maps</a></div>`:''}
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-outline" id="d-reenviar">↻ Reenviar por WhatsApp</button>
+    </div>
 
     <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Duración estimada</label>
@@ -786,6 +789,9 @@ function openDetalle(id){
     guardarDuracion();
   });
   durInput2.addEventListener('change', guardarDuracion);
+  document.getElementById('d-reenviar').addEventListener('click', ()=>{
+    window.open(waUrl(a.telefono, buildMensaje(a)), '_blank');
+  });
   renderOpGrid(a);
   document.getElementById('op-add').addEventListener('click', async ()=>{
     const nombre = prompt('Nombre del nuevo operario:');
@@ -1110,6 +1116,15 @@ document.getElementById('landing-logo').src = 'data:image/png;base64,iVBORw0KGgo
   renderPendientes(); renderCalendario(); renderArchivo();
 
   const params = new URLSearchParams(location.search);
+  if(params.get('admin')==='1'){
+    localStorage.setItem('esAdmin','1');
+  }
+  if(localStorage.getItem('esAdmin')==='1'){
+    document.getElementById('tab-archivo').style.display = '';
+  }else{
+    document.getElementById('tab-archivo').style.display = 'none';
+  }
+
   const avisoId = params.get('aviso');
   if(avisoId){
     const a = AVISOS.find(x=>x.id===avisoId);
