@@ -229,6 +229,26 @@
   }
   .foot-ribbon .ref{ font-family:"Courier New",monospace; letter-spacing:.3px; }
   .foot-ribbon .brand{ color:#6fd53a; font-weight:700; letter-spacing:.5px; }
+
+  /* ---- vista imprimible del parte (cliente o facturación) ---- */
+  #view-pdf{
+    display:none; position:fixed; inset:0; z-index:110; background:#e9e9e9;
+    overflow-y:auto; padding:20px 12px 30px; flex-direction:column; align-items:center; gap:16px;
+  }
+  #view-pdf.active{display:flex;}
+  #view-pdf .hoja{ width:100%; max-width:480px; }
+  .pdf-accion{ width:100%; max-width:480px; text-align:center; }
+  .firma-pdf-img{ width:100%; max-height:110px; object-fit:contain; border:1.5px solid #cfe8c2; border-radius:6px; background:#fff; padding:4px; }
+  .tabla-pdf{ width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+  .tabla-pdf th{ text-align:left; font-size:10.5px; text-transform:uppercase; color:#2f6a1c; padding:4px 0; border-bottom:1.5px solid #1f5c12; }
+  .tabla-pdf td{ padding:6px 0; border-bottom:1px solid var(--paper-line); }
+  @media print{
+    body *{ visibility:hidden; }
+    #view-pdf, #view-pdf *{ visibility:visible; }
+    #view-pdf{ position:static; display:flex !important; background:#fff; padding:0; }
+    .pdf-accion{ display:none; }
+    #view-pdf .hoja{ box-shadow:none; }
+  }
   .op-grid{display:flex; flex-wrap:wrap; gap:8px;}
   .op-btn{
     padding:12px 16px; border-radius:var(--radius); border:1.5px solid var(--paper-line);
@@ -405,6 +425,13 @@
   </div>
 </div>
 
+<div id="view-pdf">
+  <div class="hoja" id="pdf-hoja"></div>
+  <div class="pdf-accion">
+    <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -515,6 +542,7 @@ function todayISO(){
 function urgLabel(u){ return u==='alta'?'Urgente':u==='media'?'Normal':'Puede esperar'; }
 function estadoLabel(e){ return e==='pendiente'?'Pendiente':e==='asignado'?'Asignado':'Terminado'; }
 function mapsUrl(dir){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir); }
+function direccionMapa(a){ return a.direccionCalle || a.direccion || ''; }
 function waUrl(tel, text){
   const clean = (tel||'').replace(/[^0-9]/g,'');
   const base = clean ? ('https://wa.me/'+clean) : 'https://wa.me/';
@@ -523,7 +551,7 @@ function waUrl(tel, text){
 function buildMensaje(a){
   const link = location.origin + location.pathname + '?aviso=' + a.id;
   let t = `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)})\nCliente: ${a.cliente}\n`;
-  if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(a.direccion)}\n`;
+  if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(direccionMapa(a))}\n`;
   t += `Trabajo: ${a.trabajo}\n`;
   if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}\n`;
   t += `\nAbrir y asignarme:\n${link}`;
@@ -623,6 +651,7 @@ document.getElementById('f-fecha').value = todayISO();
 document.getElementById('btn-crear').addEventListener('click', async ()=>{
   const cliente = document.getElementById('f-cliente').value.trim();
   const telefono = document.getElementById('f-telefono').value.trim();
+  const direccionCalle = document.getElementById('f-direccion').value.trim();
   const direccion = direccionCompleta();
   const trabajo = document.getElementById('f-trabajo').value.trim();
   const fecha = document.getElementById('f-fecha').value;
@@ -631,7 +660,7 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
     return;
   }
   const aviso = {
-    id: uid(), numero: siguienteNumero(), cliente, telefono, direccion, trabajo,
+    id: uid(), numero: siguienteNumero(), cliente, telefono, direccion, direccionCalle, trabajo,
     urgencia: urgenciaActual, fecha, estado:'pendiente',
     operario:'', firma:null, emailCliente:'', notasFinal:'',
     horas:null, materiales:[], duracion:null,
@@ -704,7 +733,7 @@ function cardHtml(a){
       ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
       ${a.duracion? `<span class="mono" style="font-size:12px;color:var(--steel)">⏱ ${a.duracion}h</span>`:''}
       ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
-      ${a.direccion? `<a class="maplink" target="_blank" href="${mapsUrl(a.direccion)}">📍 Maps</a>`:''}
+      ${a.direccion? `<a class="maplink" target="_blank" href="${mapsUrl(direccionMapa(a))}">📍 Maps</a>`:''}
     </div>
   </div>`;
 }
@@ -747,7 +776,7 @@ function openDetalle(id){
     ${a.direccion? `<div class="kv"><b>Dirección</b><span style="text-align:right;max-width:65%">${escapeHtml(a.direccion)}</span></div>`:''}
     ${a.telefono? `<div class="kv"><b>Teléfono</b><span>${escapeHtml(a.telefono)}</span></div>`:''}
 
-    ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(a.direccion)}">📍 Abrir en Maps</a></div>`:''}
+    ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}">📍 Abrir en Maps</a></div>`:''}
     <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-outline" id="d-reenviar">↻ Reenviar por WhatsApp</button>
     </div>
@@ -902,7 +931,7 @@ function openFirma(id){
     await saveAvisos();
     closeOverlay(); renderPendientes(); renderCalendario(); renderArchivo();
     if(CONFIG.emailFacturacion){
-      const body = buildFacturacionTexto(a);
+      const body = buildFacturacionTexto(a) + '\n\nDocumento: ' + parteUrl(a,'facturacion');
       const link = `mailto:${encodeURIComponent(CONFIG.emailFacturacion)}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(body)}`;
       window.location.href = link;
     }else{
@@ -1077,7 +1106,10 @@ function openParteArchivado(id){
     ${a.firma? `<div style="margin-top:14px"><label style="display:block;font-size:11px;text-transform:uppercase;color:var(--text-soft);margin-bottom:6px;font-weight:600">Firma del cliente</label><img src="${a.firma}" style="width:100%;border:1.5px solid var(--paper-line);border-radius:6px;background:#fff"></div>`:''}
 
     <div class="btn-row" style="margin-top:16px">
-      <a class="btn btn-secondary" style="text-decoration:none" href="mailto:${encodeURIComponent(a.emailCliente||'')}?subject=${encodeURIComponent('Parte de trabajo Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(resumen)}">✉️ Enviar copia al cliente</a>
+      <a class="btn btn-primary" style="text-decoration:none" target="_blank" href="${parteUrl(a,'cliente')}">📄 Ver parte del cliente (para PDF)</a>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <a class="btn btn-secondary" style="text-decoration:none" href="mailto:${encodeURIComponent(a.emailCliente||'')}?subject=${encodeURIComponent('Parte de trabajo Nº'+a.numero+' - '+a.cliente)}&body=${encodeURIComponent(resumen+'\n\nDocumento: '+parteUrl(a,'cliente'))}">✉️ Enviar copia al cliente</a>
     </div>
     ${!a.emailCliente? `<div class="fab-hint">No se guardó email del cliente: escríbelo en el correo antes de enviar.</div>`:''}
 
@@ -1088,7 +1120,10 @@ function openParteArchivado(id){
       <span style="font-size:13.5px">${(a.materiales&&a.materiales.length)? a.materiales.map(m=>escapeHtml(m.nombre)+(m.cantidad?' ×'+escapeHtml(String(m.cantidad)):'')).join('<br>') : 'Ninguno'}</span>
     </div>
     <div class="btn-row" style="margin-top:10px">
-      <a class="btn btn-outline" style="text-decoration:none" href="mailto:${encodeURIComponent(CONFIG.emailFacturacion||'')}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero)}&body=${encodeURIComponent(facturacion)}">📤 Enviar datos de facturación</a>
+      <a class="btn btn-primary" style="text-decoration:none" target="_blank" href="${parteUrl(a,'facturacion')}">📄 Ver parte de facturación (para PDF)</a>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
+      <a class="btn btn-outline" style="text-decoration:none" href="mailto:${encodeURIComponent(CONFIG.emailFacturacion||'')}?subject=${encodeURIComponent('Facturar - Parte Nº'+a.numero)}&body=${encodeURIComponent(facturacion+'\n\nDocumento: '+parteUrl(a,'facturacion'))}">📤 Enviar datos de facturación</a>
     </div>
     <div class="fab-hint">Este correo no lleva la firma del cliente, es solo para pasarlo a factura.</div>
   `);
@@ -1130,7 +1165,79 @@ document.getElementById('landing-logo').src = 'data:image/png;base64,iVBORw0KGgo
     const a = AVISOS.find(x=>x.id===avisoId);
     if(a) mostrarLanding(a);
   }
+
+  const parteId = params.get('parte');
+  const parteTipo = params.get('tipo');
+  if(parteId && parteTipo){
+    const a = AVISOS.find(x=>x.id===parteId);
+    if(a) mostrarPartePDF(a, parteTipo);
+  }
 })();
+
+function parteUrl(a, tipo){
+  return location.origin + location.pathname + '?parte=' + a.id + '&tipo=' + tipo;
+}
+
+function mostrarPartePDF(a, tipo){
+  const hoja = document.getElementById('pdf-hoja');
+  const logoImg = document.getElementById('landing-logo').src;
+  const cabecera = `
+    <div class="top-accent"></div>
+    <div class="cab">
+      <div class="logo-box"><img src="${logoImg}" alt="Lampistería CR"></div>
+      <div class="cab-der">
+        <h1>Parte de trabajo</h1>
+        <div class="sub">${tipo==='cliente' ? 'a domicilio del cliente' : 'datos internos — facturación'}</div>
+        <div class="sub-rule"></div>
+        <div class="linea">Fecha <span class="val">${a.fecha? fmtDate(a.fecha) : '—'}</span></div>
+        <div class="linea">Nº <span class="val">${a.numero||'—'}</span></div>
+      </div>
+    </div>`;
+
+  if(tipo==='cliente'){
+    hoja.innerHTML = cabecera + `
+      <div class="bloque">
+        <div class="lab">Sr. / Sra.</div>
+        <div class="val">${escapeHtml(a.cliente)}</div>
+        <div class="lab" style="margin-top:8px">Lugar de trabajo</div>
+        <div class="val">${escapeHtml(a.direccion||'')}</div>
+      </div>
+      <div class="trabajo">
+        <div class="lab">Trabajo realizado</div>
+        <div class="txt">${escapeHtml(a.trabajo)}</div>
+        ${a.notasFinal? `<div class="lab" style="margin-top:10px">Notas</div><div class="txt">${escapeHtml(a.notasFinal)}</div>`:''}
+      </div>
+      <div class="bloque">
+        <div class="lab">Firma del cliente</div>
+        ${a.firma? `<img class="firma-pdf-img" src="${a.firma}">` : `<div style="height:60px;border-bottom:1px solid #111;"></div>`}
+      </div>
+      <div class="foot-ribbon"><span class="ref">Nº ${a.numero||'—'}${a.fecha? ' · '+fmtDate(a.fecha):''}</span><span class="brand">LAMPISTERÍA CR</span></div>
+    `;
+  }else{
+    const filasMat = (a.materiales||[]).map(m=>`<tr><td>${escapeHtml(m.nombre)}</td><td>${m.cantidad!=null?escapeHtml(String(m.cantidad)):''}</td></tr>`).join('');
+    hoja.innerHTML = cabecera + `
+      <div class="bloque">
+        <div class="lab">Cliente</div>
+        <div class="val">${escapeHtml(a.cliente)}</div>
+        <div class="lab" style="margin-top:8px">Operario</div>
+        <div class="val">${escapeHtml(a.operario||'—')}</div>
+      </div>
+      <div class="trabajo">
+        <div class="lab">Horas trabajadas</div>
+        <div class="txt" style="font-size:18px;font-weight:700;">${a.horas!=null? a.horas+' h' : '—'}</div>
+      </div>
+      <div class="bloque">
+        <div class="lab">Materiales empleados</div>
+        <table class="tabla-pdf">
+          <thead><tr><th>Material</th><th>Cantidad</th></tr></thead>
+          <tbody>${filasMat || '<tr><td colspan="2" style="color:var(--text-soft)">Ninguno</td></tr>'}</tbody>
+        </table>
+      </div>
+      <div class="foot-ribbon"><span class="ref">Nº ${a.numero||'—'} · interno</span><span class="brand">LAMPISTERÍA CR</span></div>
+    `;
+  }
+  document.getElementById('view-pdf').classList.add('active');
+}
 
 function mostrarLanding(a){
   document.getElementById('landing-urg').dataset.u = a.urgencia;
@@ -1142,7 +1249,7 @@ function mostrarLanding(a){
   document.getElementById('landing-trabajo').textContent = a.trabajo;
   document.getElementById('landing-ref').textContent = 'Nº ' + (a.numero||'—') + (a.fecha ? ' · '+fmtDate(a.fecha) : '');
   if(a.direccion){
-    document.getElementById('landing-maps').href = mapsUrl(a.direccion);
+    document.getElementById('landing-maps').href = mapsUrl(direccionMapa(a));
     document.getElementById('landing-maps').style.display = 'inline-flex';
   }else{
     document.getElementById('landing-maps').style.display = 'none';
