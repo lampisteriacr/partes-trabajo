@@ -389,6 +389,12 @@
     </div>
 
     <div class="entrar-box">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#2f6a1c;font-weight:700;margin-bottom:6px;">Duración estimada</label>
+      <div class="stepper" style="margin-bottom:14px">
+        <button type="button" id="landing-dur-menos">−</button>
+        <input type="number" id="landing-duracion" step="0.5" min="0" value="1">
+        <button type="button" id="landing-dur-mas">+</button>
+      </div>
       <button class="btn btn-primary" id="landing-entrar">Entrar y asignarme este trabajo</button>
     </div>
 
@@ -516,7 +522,12 @@ function waUrl(tel, text){
 }
 function buildMensaje(a){
   const link = location.origin + location.pathname + '?aviso=' + a.id;
-  return `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)}) — ${a.cliente}\n${link}`;
+  let t = `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)})\nCliente: ${a.cliente}\n`;
+  if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(a.direccion)}\n`;
+  t += `Trabajo: ${a.trabajo}\n`;
+  if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}\n`;
+  t += `\nAbrir y asignarme:\n${link}`;
+  return t;
 }
 
 // ---------- tabs ----------
@@ -623,7 +634,7 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
     id: uid(), numero: siguienteNumero(), cliente, telefono, direccion, trabajo,
     urgencia: urgenciaActual, fecha, estado:'pendiente',
     operario:'', firma:null, emailCliente:'', notasFinal:'',
-    horas:null, materiales:[],
+    horas:null, materiales:[], duracion:null,
     creadoEn: new Date().toISOString()
   };
   const ventanaWa = window.open('', '_blank');
@@ -691,6 +702,7 @@ function cardHtml(a){
     <div class="meta">
       <span class="badge ${a.estado}">${estadoLabel(a.estado)}</span>
       ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
+      ${a.duracion? `<span class="mono" style="font-size:12px;color:var(--steel)">⏱ ${a.duracion}h</span>`:''}
       ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
       ${a.direccion? `<a class="maplink" target="_blank" href="${mapsUrl(a.direccion)}">📍 Maps</a>`:''}
     </div>
@@ -738,6 +750,15 @@ function openDetalle(id){
     ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(a.direccion)}">📍 Abrir en Maps</a></div>`:''}
 
     <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Duración estimada</label>
+      <div class="stepper">
+        <button type="button" id="d-dur-menos">−</button>
+        <input type="number" id="d-duracion" step="0.5" min="0" value="${a.duracion!=null?a.duracion:1}">
+        <button type="button" id="d-dur-mas">+</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">¿Quién lo hace?</label>
       <div class="op-grid" id="op-grid"></div>
       <button class="btn btn-outline" id="op-add" style="margin-top:8px">+ Añadir operario nuevo</button>
@@ -750,6 +771,21 @@ function openDetalle(id){
       <button class="btn btn-danger" id="d-borrar">Eliminar aviso</button>
     </div>
   `);
+  const durInput2 = document.getElementById('d-duracion');
+  const guardarDuracion = async ()=>{
+    a.duracion = parseFloat(durInput2.value) || 0;
+    await saveAvisos();
+    renderPendientes(); renderCalendario();
+  };
+  document.getElementById('d-dur-menos').addEventListener('click', ()=>{
+    durInput2.value = Math.max(0, (parseFloat(durInput2.value)||0) - 0.5);
+    guardarDuracion();
+  });
+  document.getElementById('d-dur-mas').addEventListener('click', ()=>{
+    durInput2.value = (parseFloat(durInput2.value)||0) + 0.5;
+    guardarDuracion();
+  });
+  durInput2.addEventListener('change', guardarDuracion);
   renderOpGrid(a);
   document.getElementById('op-add').addEventListener('click', async ()=>{
     const nombre = prompt('Nombre del nuevo operario:');
@@ -969,7 +1005,8 @@ function renderCalendario(){
   });
   cont.innerHTML='';
   Object.keys(conOperario).sort().forEach(op=>{
-    cont.innerHTML += `<div class="op-group"><div class="op-name">${escapeHtml(op)}</div>`;
+    const totalHoras = conOperario[op].reduce((s,a)=> s + (a.duracion||0), 0);
+    cont.innerHTML += `<div class="op-group"><div class="op-name">${escapeHtml(op)}${totalHoras? ` <span class="mono" style="font-weight:400;color:var(--text-soft);font-size:12px">· ${totalHoras}h estimadas</span>`:''}</div>`;
     conOperario[op].sort(ordenUrgencia).forEach(a=> cont.innerHTML += cardHtml(a));
     cont.innerHTML += `</div>`;
   });
@@ -1095,15 +1132,25 @@ function mostrarLanding(a){
   }else{
     document.getElementById('landing-maps').style.display = 'none';
   }
+  const durInput = document.getElementById('landing-duracion');
+  durInput.value = a.duracion!=null ? a.duracion : 1;
+  document.getElementById('landing-dur-menos').onclick = ()=>{
+    durInput.value = Math.max(0, (parseFloat(durInput.value)||0) - 0.5);
+  };
+  document.getElementById('landing-dur-mas').onclick = ()=>{
+    durInput.value = (parseFloat(durInput.value)||0) + 0.5;
+  };
   document.getElementById('view-landing').classList.add('active');
-  document.getElementById('landing-entrar').onclick = ()=>{
+  document.getElementById('landing-entrar').onclick = async ()=>{
+    a.duracion = parseFloat(durInput.value) || 0;
+    await saveAvisos();
     document.getElementById('view-landing').classList.remove('active');
     history.replaceState({}, '', location.pathname);
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelector('.tab-btn[data-view="pendientes"]').classList.add('active');
     document.getElementById('view-pendientes').classList.add('active');
-    renderPendientes();
+    renderPendientes(); renderCalendario();
     openDetalle(a.id);
   };
 }
