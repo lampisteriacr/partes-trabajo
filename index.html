@@ -104,9 +104,11 @@
     font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;
     padding:3px 7px; border-radius:3px; font-family:"IBM Plex Mono",monospace;
   }
-  .badge.pendiente{background:#EFE9DA; color:var(--steel);}
-  .badge.asignado{background:#F3E0C4; color:var(--copper-dark);}
-  .badge.terminado{background:#DEEBDF; color:var(--baja);}
+  .badge.pendiente{background:var(--urgente); color:#fff;}
+  .badge.asignado{background:var(--copper); color:#fff;}
+  .badge.terminado{background:var(--baja); color:#fff;}
+  .badge.facturado{background:#2f6a1c; color:#fff;}
+  .badge.sinfacturar{background:#e8dcc0; color:#8a6d1f;}
   .maplink{
     font-size:12.5px; color:var(--steel); text-decoration:none; display:inline-flex; align-items:center; gap:3px;
   }
@@ -141,6 +143,22 @@
   }
   .op-name::before{content:"●"; color:var(--copper); font-size:9px;}
 
+  /* ---- calendario visual (línea de tiempo) ---- */
+  .timeline-wrap{ background:#fff; border:1.5px solid var(--paper-line); border-radius:var(--radius); padding:12px 12px 8px; margin-bottom:16px; }
+  .timeline-scale{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-soft); font-family:"IBM Plex Mono",monospace; padding-left:74px; margin-bottom:6px; }
+  .timeline-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .timeline-nombre{ width:66px; flex:0 0 66px; font-size:11.5px; font-weight:700; color:var(--graphite); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .timeline-track{ position:relative; flex:1; height:30px; background:var(--paper); border-radius:5px; overflow:hidden; }
+  .timeline-block{
+    position:absolute; top:2px; bottom:2px; border-radius:4px; font-size:10px; color:#fff;
+    display:flex; align-items:center; padding:0 6px; overflow:hidden; white-space:nowrap; cursor:pointer;
+    font-weight:600;
+  }
+  .timeline-block[data-urg="alta"]{background:var(--urgente);}
+  .timeline-block[data-urg="media"]{background:var(--normal); color:#2b2200;}
+  .timeline-block[data-urg="baja"]{background:var(--baja);}
+  .timeline-sinhora{ font-size:10px; color:var(--text-soft); margin-left:74px; margin-bottom:6px; }
+
   /* ---- detail sheet ---- */
   .overlay{
     position:fixed; inset:0; background:rgba(28,33,40,0.55); z-index:50; display:none;
@@ -153,6 +171,19 @@
   }
   .sheet.active{transform:translateY(0);}
   .sheet-handle{width:36px; height:4px; background:var(--paper-line); border-radius:2px; margin:0 auto 14px;}
+  .sheet-close-btn{
+    position:absolute; top:14px; right:14px; width:34px; height:34px; border-radius:50%;
+    background:var(--paper); border:1.5px solid var(--paper-line); color:var(--text);
+    font-size:16px; font-weight:700; cursor:pointer; z-index:5;
+  }
+  .toast-ok{
+    position:fixed; left:50%; top:18px; transform:translateX(-50%); z-index:200;
+    background:var(--graphite); color:#fff; padding:10px 18px; border-radius:24px;
+    font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px;
+    box-shadow:0 4px 14px rgba(0,0,0,.25); opacity:0; transition:opacity .25s ease;
+  }
+  .toast-ok.show{opacity:1;}
+  .toast-ok .chk{ color:var(--baja); font-size:17px; font-weight:900; }
   .sheet h2{font-size:17px; margin:0 0 3px;}
   .sheet .sub{font-size:12.5px; color:var(--text-soft); margin-bottom:14px;}
   .kv{display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--paper-line); font-size:14px;}
@@ -256,6 +287,7 @@
     font-family:inherit;
   }
   .op-btn.active{background:var(--copper); border-color:var(--copper); color:#fff;}
+  .op-btn.ocupado{background:#f3f0ea; color:var(--text-soft); border-style:dashed;}
   .mat-row{
     display:flex; gap:6px; align-items:center; margin-bottom:8px;
   }
@@ -344,6 +376,10 @@
       <label>Fecha prevista</label>
       <input type="date" id="f-fecha">
     </div>
+    <div class="field">
+      <label>Hora acordada con el cliente (opcional)</label>
+      <input type="time" id="f-hora">
+    </div>
     <button class="btn btn-primary" id="btn-crear">Crear y enviar por WhatsApp</button>
     <div class="fab-hint">Se guarda en el panel y se abre WhatsApp con el mensaje ya escrito.</div>
   </section>
@@ -383,6 +419,7 @@
 </nav>
 
 <div class="overlay" id="overlay"></div>
+<div class="toast-ok" id="toast-ok"><span class="chk">✓</span><span id="toast-ok-txt">Guardado</span></div>
 <div class="sheet" id="sheet"></div>
 
 <div id="view-landing">
@@ -531,6 +568,7 @@ function buildFacturacionTexto(a){
     `Cliente: ${a.cliente}\n`+
     `Dirección: ${a.direccion||'-'}\n`+
     `Fecha: ${a.fecha?fmtDate(a.fecha):''}\n`+
+    `Hora acordada: ${a.hora||'-'}${a.duracion!=null? ' ('+a.duracion+'h estimadas)':''}\n`+
     `Operario: ${a.operario||'-'}\n`+
     `Horas trabajadas: ${a.horas!=null?a.horas:'-'}\n`+
     `Materiales:\n${materialesTxt}`;
@@ -548,7 +586,7 @@ function todayISO(){
   return d.toISOString().slice(0,10);
 }
 function urgLabel(u){ return u==='alta'?'Urgente':u==='media'?'Normal':'Puede esperar'; }
-function estadoLabel(e){ return e==='pendiente'?'Pendiente':e==='asignado'?'Asignado':'Terminado'; }
+function estadoLabel(e){ return e==='pendiente'?'🔴 Sin asignar':e==='asignado'?'🟢 Asignado':'✅ Terminado'; }
 function mapsUrl(dir){ return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir); }
 function direccionMapa(a){ return a.direccionCalle || a.direccion || ''; }
 function waUrl(tel, text){
@@ -561,7 +599,7 @@ function buildMensaje(a){
   let t = `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)})\nCliente: ${a.cliente}\n`;
   if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(direccionMapa(a))}\n`;
   t += `Trabajo: ${a.trabajo}\n`;
-  if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}\n`;
+  if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}${a.hora? ' a las '+a.hora:''}\n`;
   t += `\nAbrir y asignarme:\n${link}`;
   return t;
 }
@@ -619,7 +657,7 @@ inputDireccion.addEventListener('input', ()=>{
 });
 async function buscarDirecciones(q){
   try{
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=6&q=' + encodeURIComponent(q + ', España');
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(q + ', España');
     const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
     if(!res.ok){
       estadoDireccion.textContent = `El buscador respondió con error (${res.status}). Puedes escribir la dirección a mano.`;
@@ -633,12 +671,13 @@ async function buscarDirecciones(q){
       return;
     }
     estadoDireccion.textContent = '';
+    const limpias = data.map(direccionLimpia);
     cajaSugerencias.innerHTML = data.map((d,i)=>
-      `<div class="sug-item" data-i="${i}">${escapeHtml(d.display_name)}</div>`
+      `<div class="sug-item" data-i="${i}">${escapeHtml(limpias[i])}</div>`
     ).join('');
     cajaSugerencias.querySelectorAll('.sug-item').forEach(el=>{
       el.addEventListener('click', ()=>{
-        inputDireccion.value = data[parseInt(el.dataset.i)].display_name;
+        inputDireccion.value = limpias[parseInt(el.dataset.i)];
         direccionValidada = true;
         cajaSugerencias.innerHTML = '';
         estadoDireccion.textContent = '';
@@ -648,6 +687,18 @@ async function buscarDirecciones(q){
     estadoDireccion.textContent = 'No se pudo conectar con el buscador de direcciones. Puedes escribir la dirección a mano.';
     cajaSugerencias.innerHTML = '';
   }
+}
+function direccionLimpia(d){
+  const ad = d.address || {};
+  const calle = ad.road || ad.pedestrian || ad.residential || '';
+  const numero = ad.house_number || '';
+  const ciudad = ad.city || ad.town || ad.village || ad.municipality || '';
+  const cp = ad.postcode || '';
+  let calleNum = calle;
+  if(calle && numero) calleNum = `${calle} ${numero}`;
+  else if(!calle) calleNum = (d.display_name||'').split(',')[0];
+  const partes = [calleNum, ciudad, cp].filter(Boolean);
+  return partes.length ? partes.join(', ') : (d.display_name||'');
 }
 document.addEventListener('click', (e)=>{
   if(!e.target.closest('#f-direccion') && !e.target.closest('#direccion-sugerencias')){
@@ -664,13 +715,14 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
   const direccion = direccionCompleta();
   const trabajo = document.getElementById('f-trabajo').value.trim();
   const fecha = document.getElementById('f-fecha').value;
+  const hora = document.getElementById('f-hora').value;
   if(!cliente || !trabajo){
     alert('Falta el cliente o la descripción del trabajo.');
     return;
   }
   const aviso = {
     id: uid(), numero: siguienteNumero(), cliente, telefono, direccion, direccionCalle, trabajo,
-    urgencia: urgenciaActual, fecha, estado:'pendiente',
+    urgencia: urgenciaActual, fecha, hora, estado:'pendiente',
     operario:'', firma:null, emailCliente:'', notasFinal:'',
     horas:null, materiales:[], duracion:null,
     creadoEn: new Date().toISOString()
@@ -692,6 +744,7 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
   direccionValidada = false;
   document.getElementById('f-trabajo').value='';
   document.getElementById('f-fecha').value = todayISO();
+  document.getElementById('f-hora').value = '';
   document.querySelectorAll('.urg-btn').forEach(x=>x.classList.remove('active'));
   document.querySelector('.urg-btn[data-u="media"]').classList.add('active');
   urgenciaActual = 'media';
@@ -702,6 +755,12 @@ function ordenUrgencia(a,b){
   const rank = {alta:0, media:1, baja:2};
   if(rank[a.urgencia] !== rank[b.urgencia]) return rank[a.urgencia]-rank[b.urgencia];
   return (a.fecha||'').localeCompare(b.fecha||'');
+}
+function ordenHora(a,b){
+  if(a.hora && b.hora) return a.hora.localeCompare(b.hora);
+  if(a.hora && !b.hora) return -1;
+  if(!a.hora && b.hora) return 1;
+  return ordenUrgencia(a,b);
 }
 function renderPendientes(){
   const q = (document.getElementById('buscar-pend').value||'').toLowerCase();
@@ -717,11 +776,11 @@ function renderPendientes(){
     return;
   }
   if(pend.length){
-    cont.innerHTML += `<div class="section-label">Sin asignar <span class="count">${pend.length}</span></div>`;
+    cont.innerHTML += `<div class="section-label" style="color:var(--urgente)">🔴 Sin asignar <span class="count" style="background:var(--urgente)">${pend.length}</span></div>`;
     pend.forEach(a=> cont.innerHTML += cardHtml(a));
   }
   if(asig.length){
-    cont.innerHTML += `<div class="section-label">Asignados <span class="count">${asig.length}</span></div>`;
+    cont.innerHTML += `<div class="section-label" style="color:var(--copper-dark)">🟢 Asignados <span class="count" style="background:var(--copper)">${asig.length}</span></div>`;
     asig.forEach(a=> cont.innerHTML += cardHtml(a));
   }
   cont.querySelectorAll('.card').forEach(c=>{
@@ -739,8 +798,8 @@ function cardHtml(a){
     </div>
     <div class="meta">
       <span class="badge ${a.estado}">${estadoLabel(a.estado)}</span>
-      ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
-      ${a.duracion? `<span class="mono" style="font-size:12px;color:var(--steel)">⏱ ${a.duracion}h</span>`:''}
+      ${a.hora? `<span class="mono" style="font-size:12px;font-weight:700;color:var(--graphite)">🕐 ${a.hora}${a.duracion? '–'+fmtHora(rangoHoras(a).fin):''}</span>` : (a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:'')}
+      ${!a.hora && a.duracion? `<span class="mono" style="font-size:12px;color:var(--steel)">⏱ ${a.duracion}h</span>`:''}
       ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
       ${a.direccion? `<a class="maplink" target="_blank" href="${mapsUrl(direccionMapa(a))}">📍 Maps</a>`:''}
     </div>
@@ -763,13 +822,21 @@ document.getElementById('btn-ajustes').addEventListener('click', async ()=>{
 
 // ---------- detalle / sheet ----------
 function openOverlay(html){
-  document.getElementById('sheet').innerHTML = html;
+  document.getElementById('sheet').innerHTML = `<button type="button" id="sheet-close" class="sheet-close-btn" aria-label="Cerrar">✕</button>` + html;
   document.getElementById('overlay').classList.add('active');
   document.getElementById('sheet').classList.add('active');
+  document.getElementById('sheet-close').addEventListener('click', closeOverlay);
 }
 function closeOverlay(){
   document.getElementById('overlay').classList.remove('active');
   document.getElementById('sheet').classList.remove('active');
+}
+function mostrarToast(texto){
+  const t = document.getElementById('toast-ok');
+  document.getElementById('toast-ok-txt').textContent = texto;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.classList.remove('show'), 1400);
 }
 document.getElementById('overlay').addEventListener('click', closeOverlay);
 
@@ -803,6 +870,7 @@ function openDetalle(id){
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">¿Quién lo hace?</label>
       <div class="op-grid" id="op-grid"></div>
       <button class="btn btn-outline" id="op-add" style="margin-top:8px">+ Añadir operario nuevo</button>
+      <div class="fab-hint">Se guarda solo al tocar. Puedes cerrar con la ✕ de arriba cuando quieras — el trabajo se cierra (con firma) solo desde el botón de abajo.</div>
     </div>
 
     <div class="btn-row" style="margin-top:18px">
@@ -836,7 +904,9 @@ function openDetalle(id){
     if(nombre && nombre.trim()){
       const n = nombre.trim();
       if(!OPERARIOS.includes(n)){ OPERARIOS.push(n); await saveOperarios(); }
-      a.operario = n;
+      const sel = operariosDe(a);
+      if(!sel.includes(n)) sel.push(n);
+      a.operario = sel.join(' + ');
       if(a.estado==='pendiente') a.estado='asignado';
       await saveAvisos();
       renderOpGrid(a);
@@ -853,6 +923,35 @@ function openDetalle(id){
     }
   });
 }
+function operariosDe(a){
+  return (a.operario||'').split(' + ').map(s=>s.trim()).filter(Boolean);
+}
+function rangoHoras(a){
+  if(!a.hora) return null;
+  const [h,m] = a.hora.split(':').map(Number);
+  const ini = h*60 + m;
+  const dur = a.duracion!=null && a.duracion>0 ? a.duracion : 1;
+  return { ini, fin: ini + Math.round(dur*60) };
+}
+function fmtHora(mins){
+  const h = Math.floor((mins%1440)/60);
+  const m = mins%60;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function buscarChoque(a, operario){
+  const r1 = rangoHoras(a);
+  if(!r1 || !a.fecha) return null;
+  const choque = AVISOS.find(b=>{
+    if(b.id===a.id || b.estado==='terminado' || b.fecha!==a.fecha) return false;
+    if(!operariosDe(b).includes(operario)) return false;
+    const r2 = rangoHoras(b);
+    if(!r2) return false;
+    return r1.ini < r2.fin && r2.ini < r1.fin;
+  });
+  if(!choque) return null;
+  const r2 = rangoHoras(choque);
+  return `${operario} ya tiene el trabajo Nº${choque.numero} (${choque.cliente}) de ${fmtHora(r2.ini)} a ${fmtHora(r2.fin)} ese día.`;
+}
 function renderOpGrid(a){
   const grid = document.getElementById('op-grid');
   if(!grid) return;
@@ -860,16 +959,35 @@ function renderOpGrid(a){
     grid.innerHTML = `<div style="font-size:13px;color:var(--text-soft)">Aún no hay operarios. Añade el primero abajo.</div>`;
     return;
   }
-  grid.innerHTML = OPERARIOS.map(op=>
-    `<button class="op-btn ${a.operario===op?'active':''}" data-op="${escapeHtml(op)}">${escapeHtml(op)}</button>`
-  ).join('');
+  const seleccionados = operariosDe(a);
+  grid.innerHTML = OPERARIOS.map(op=>{
+    const ocupado = !seleccionados.includes(op) && !!buscarChoque(a, op);
+    return `<button class="op-btn ${seleccionados.includes(op)?'active':''} ${ocupado?'ocupado':''}" data-op="${escapeHtml(op)}">${escapeHtml(op)}${ocupado?' 🔒':''}</button>`;
+  }).join('');
   grid.querySelectorAll('.op-btn').forEach(b=>{
     b.addEventListener('click', async ()=>{
-      a.operario = b.dataset.op;
-      if(a.estado==='pendiente') a.estado='asignado';
+      let sel = operariosDe(a);
+      const op = b.dataset.op;
+      const yaAsignado = sel.includes(op);
+      if(!yaAsignado){
+        const choque = buscarChoque(a, op);
+        if(choque){
+          alert('⚠️ No se puede asignar: ' + choque);
+          return;
+        }
+      }
+      if(yaAsignado){
+        sel = sel.filter(x=>x!==op);
+      }else{
+        sel.push(op);
+      }
+      a.operario = sel.join(' + ');
+      if(a.estado==='pendiente' && sel.length) a.estado='asignado';
+      if(a.estado==='asignado' && !sel.length) a.estado='pendiente';
       await saveAvisos();
       renderOpGrid(a);
       renderPendientes(); renderCalendario();
+      mostrarToast(sel.includes(op) ? `✓ ${op} asignado` : `${op} quitado`);
     });
   });
 }
@@ -1036,6 +1154,42 @@ function setupSigPad(){
 }
 
 // ---------- calendario ----------
+const TL_INICIO = 7, TL_FIN = 20; // franja visible: 7:00 a 20:00
+function renderTimeline(dayAvisos){
+  const porOperario = {};
+  const sinHora = [];
+  dayAvisos.forEach(a=>{
+    const ops = operariosDe(a);
+    if(!a.hora){ sinHora.push(a); return; }
+    if(ops.length===0){ sinHora.push(a); return; }
+    ops.forEach(op=>{ (porOperario[op] = porOperario[op]||[]).push(a); });
+  });
+  const nombres = Object.keys(porOperario).sort();
+  if(nombres.length===0) return '';
+  const totalMin = (TL_FIN-TL_INICIO)*60;
+  const marcas = [7,10,13,16,19];
+  let html = `<div class="timeline-wrap">
+    <div class="timeline-scale">${marcas.map(h=>`<span>${h}h</span>`).join('')}</div>`;
+  nombres.forEach(op=>{
+    const bloques = porOperario[op].map(a=>{
+      const r = rangoHoras(a);
+      const ini = Math.max(r.ini, TL_INICIO*60);
+      const fin = Math.min(r.fin, TL_FIN*60);
+      const left = ((ini - TL_INICIO*60)/totalMin*100).toFixed(2);
+      const width = Math.max(3, ((fin-ini)/totalMin*100)).toFixed(2);
+      return `<div class="timeline-block" data-urg="${a.urgencia}" data-id="${a.id}" style="left:${left}%;width:${width}%" title="${escapeHtml(a.cliente)} · ${a.hora}">${escapeHtml(a.cliente)}</div>`;
+    }).join('');
+    html += `<div class="timeline-row">
+      <div class="timeline-nombre">${escapeHtml(op)}</div>
+      <div class="timeline-track">${bloques}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  if(sinHora.length){
+    html += `<div class="timeline-sinhora">⏱ ${sinHora.length} trabajo${sinHora.length>1?'s':''} sin hora asignada aún</div>`;
+  }
+  return html;
+}
 function renderCalendario(){
   const scroll = document.getElementById('day-scroll');
   const days = [];
@@ -1071,21 +1225,25 @@ function renderCalendario(){
     else sinOperario.push(a);
   });
   cont.innerHTML='';
+  cont.innerHTML += renderTimeline(dayAvisos);
   Object.keys(conOperario).sort().forEach(op=>{
     const totalHoras = conOperario[op].reduce((s,a)=> s + (a.duracion||0), 0);
     cont.innerHTML += `<div class="op-group"><div class="op-name">${escapeHtml(op)}${totalHoras? ` <span class="mono" style="font-weight:400;color:var(--text-soft);font-size:12px">· ${totalHoras}h estimadas</span>`:''}</div>`;
-    conOperario[op].sort(ordenUrgencia).forEach(a=> cont.innerHTML += cardHtml(a));
+    conOperario[op].sort(ordenHora).forEach(a=> cont.innerHTML += cardHtml(a));
     cont.innerHTML += `</div>`;
   });
   if(sinOperario.length){
-    cont.innerHTML += `<div class="section-label">Sin asignar <span class="count">${sinOperario.length}</span></div>`;
-    sinOperario.sort(ordenUrgencia).forEach(a=> cont.innerHTML += cardHtml(a));
+    cont.innerHTML += `<div class="section-label" style="color:var(--urgente)">🔴 Sin asignar <span class="count" style="background:var(--urgente)">${sinOperario.length}</span></div>`;
+    sinOperario.sort(ordenHora).forEach(a=> cont.innerHTML += cardHtml(a));
   }
   cont.querySelectorAll('.card').forEach(c=>{
     c.addEventListener('click', (e)=>{
       if(e.target.closest('.maplink')) return;
       openDetalle(c.dataset.id);
     });
+  });
+  cont.querySelectorAll('.timeline-block').forEach(b=>{
+    b.addEventListener('click', ()=> openDetalle(b.dataset.id));
   });
 }
 
@@ -1107,7 +1265,7 @@ function renderRealizados(){
         <div class="trabajo">${escapeHtml(a.trabajo)}</div>
       </div></div>
       <div class="meta">
-        <span class="badge terminado">Terminado</span>
+        <span class="badge ${a.facturado?'facturado':'sinfacturar'}">${a.facturado?'💰 Facturado':'⏳ Sin facturar'}</span>
         ${a.terminadoEn? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${new Date(a.terminadoEn).toLocaleDateString('es-ES')}</span>`:''}
         ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
       </div>
@@ -1165,7 +1323,7 @@ function renderArchivo(){
           <div class="trabajo">${escapeHtml(a.trabajo)}</div>
         </div></div>
         <div class="meta">
-          <span class="badge terminado">Terminado</span>
+          <span class="badge ${a.facturado?'facturado':'sinfacturar'}">${a.facturado?'💰 Facturado':'⏳ Sin facturar'}</span>
           ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
           ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
         </div>
@@ -1214,10 +1372,18 @@ function openParteArchivado(id){
     <div class="btn-row" style="margin-top:8px">
       <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'facturacion')}">👁️ Ver / volver a generar</a>
     </div>
+    <div class="btn-row" style="margin-top:8px">
+      <button class="btn ${a.facturado?'btn-outline':'btn-secondary'}" id="arch-toggle-facturado">${a.facturado? '↩️ Marcar como sin facturar' : '💰 Marcar como facturado'}</button>
+    </div>
     <div class="fab-hint">"Enviar PDF" abre el menú de compartir del móvil con el archivo ya adjunto (WhatsApp, correo...).</div>
   `);
   document.getElementById('arch-compartir-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
   document.getElementById('arch-compartir-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
+  document.getElementById('arch-toggle-facturado').addEventListener('click', async ()=>{
+    a.facturado = !a.facturado;
+    await saveAvisos();
+    closeOverlay(); renderArchivo(); renderRealizados();
+  });
 }
 
 // ---------- init ----------
@@ -1309,6 +1475,8 @@ function buildParteHTML(a, tipo){
       <div class="bloque">
         <div class="lab">Cliente</div>
         <div class="val">${escapeHtml(a.cliente)}</div>
+        <div class="lab" style="margin-top:8px">Hora acordada</div>
+        <div class="val">${a.hora||'—'}${a.duracion!=null? ' · '+a.duracion+'h estimadas':''}</div>
         <div class="lab" style="margin-top:8px">Operario</div>
         <div class="val">${escapeHtml(a.operario||'—')}</div>
       </div>
@@ -1417,7 +1585,7 @@ function mostrarLanding(a){
   document.getElementById('landing-urg').dataset.u = a.urgencia;
   document.getElementById('landing-urg').textContent = urgLabel(a.urgencia);
   document.getElementById('landing-num').textContent = a.numero || '—';
-  document.getElementById('landing-fecha').textContent = a.fecha ? fmtDate(a.fecha) : '—';
+  document.getElementById('landing-fecha').textContent = a.fecha ? fmtDate(a.fecha) + (a.hora? ' · '+a.hora+'h':'') : '—';
   document.getElementById('landing-cliente').textContent = a.cliente;
   document.getElementById('landing-direccion').textContent = a.direccion || 'No indicada';
   document.getElementById('landing-trabajo').textContent = a.trabajo;
