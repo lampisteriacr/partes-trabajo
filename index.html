@@ -146,6 +146,7 @@
   /* ---- calendario visual (línea de tiempo) ---- */
   .timeline-wrap{ background:#fff; border:1.5px solid var(--paper-line); border-radius:var(--radius); padding:12px 12px 8px; margin-bottom:16px; }
   .timeline-scale{ display:flex; justify-content:space-between; font-size:9.5px; color:var(--text-soft); font-family:"IBM Plex Mono",monospace; padding-left:74px; margin-bottom:6px; }
+  .timeline-legend{ font-size:10.5px; color:var(--text-soft); margin-bottom:10px; }
   .timeline-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; }
   .timeline-nombre{ width:66px; flex:0 0 66px; font-size:11.5px; font-weight:700; color:var(--graphite); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .timeline-track{ position:relative; flex:1; height:30px; background:var(--paper); border-radius:5px; overflow:hidden; }
@@ -586,6 +587,9 @@ async function saveConfig(){
     console.error('No se pudo guardar config', e);
   }
 }
+function pagoLabel(p){
+  return p==='cobrado'?'💶 Cobrado': p==='bizum'?'📱 Bizum': p==='facturar'?'🧾 Para facturar': p==='definir'?'❓ A definir':'—';
+}
 function buildFacturacionTexto(a){
   const materialesTxt = (a.materiales||[]).map(m=>`- ${m.nombre}${m.cantidad?` x${m.cantidad}`:''}`).join('\n') || 'Ninguno';
   return `FACTURAR — Parte Nº${a.numero}\n`+
@@ -595,6 +599,8 @@ function buildFacturacionTexto(a){
     `Hora acordada: ${a.hora||'-'}${a.duracion!=null? ' ('+a.duracion+'h estimadas)':''}\n`+
     `Operario: ${a.operario||'-'}\n`+
     `Horas trabajadas: ${a.horas!=null?a.horas:'-'}\n`+
+    `Estado del pago: ${pagoLabel(a.estadoPago)}\n`+
+    (a.observacionesFactura? `Observaciones: ${a.observacionesFactura}\n`:'')+
     `Materiales:\n${materialesTxt}`;
 }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -884,6 +890,11 @@ function openDetalle(id){
     </div>
 
     <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Fecha prevista</label>
+      <input type="date" id="d-fecha" value="${a.fecha||''}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+    </div>
+
+    <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Hora acordada con el cliente</label>
       <input type="time" id="d-hora" value="${a.hora||''}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
     </div>
@@ -926,6 +937,17 @@ function openDetalle(id){
     guardarDuracion();
   });
   durInput2.addEventListener('change', guardarDuracion);
+  document.getElementById('d-fecha').addEventListener('change', async (e)=>{
+    a.fecha = e.target.value;
+    await saveAvisos();
+    renderPendientes(); renderCalendario();
+    renderOpGrid(a);
+    const choques = operariosDe(a).map(op=>buscarChoque(a, op)).filter(Boolean);
+    if(choques.length){
+      alert('⚠️ Ojo, ahora choca con otro trabajo:\n' + choques.join('\n'));
+    }
+    mostrarToast(a.fecha ? `✓ Fecha guardada: ${fmtDate(a.fecha)}` : 'Fecha quitada');
+  });
   document.getElementById('d-hora').addEventListener('change', async (e)=>{
     a.hora = e.target.value;
     await saveAvisos();
@@ -1056,6 +1078,11 @@ function openFirma(id){
     <div id="mat-list"></div>
     <button class="btn btn-outline" id="mat-add" type="button">+ Añadir material</button>
 
+    <div class="field" style="margin-top:16px">
+      <label>Observaciones para facturación (opcional)</label>
+      <textarea id="f-obs-factura" placeholder="Cualquier cosa que deba saber quien factura...">${a.observacionesFactura||''}</textarea>
+    </div>
+
     <div class="section-label" style="margin-top:20px">Para el cliente</div>
     <div class="field">
       <label>Notas finales (opcional, se le puede enviar al cliente)</label>
@@ -1095,6 +1122,7 @@ function openFirma(id){
     leerMatList();
     a.horas = parseFloat(document.getElementById('f-horas').value) || 0;
     a.materiales = materialesTmp.filter(m=>m.nombre.trim());
+    a.observacionesFactura = document.getElementById('f-obs-factura').value.trim();
     a.notasFinal = document.getElementById('f-notas').value.trim();
     a.emailCliente = document.getElementById('f-email').value.trim();
     a.firma = sigCanvas.toDataURL('image/png');
@@ -1220,6 +1248,7 @@ function renderTimeline(dayAvisos){
   const marcas = [7,10,13,16,19];
   const urgDot = {alta:'🔴', media:'🟡', baja:'🟢'};
   let html = `<div class="timeline-wrap">
+    <div class="timeline-legend">🔴🟡🟢 = urgencia del aviso · el color del bloque = mismo trabajo</div>
     <div class="timeline-scale">${marcas.map(h=>`<span>${h}h</span>`).join('')}</div>`;
   nombres.forEach(op=>{
     const colorFila = colorParaOperario(op);
@@ -1319,6 +1348,7 @@ function renderRealizados(){
       </div></div>
       <div class="meta">
         <span class="badge ${a.facturado?'facturado':'sinfacturar'}">${a.facturado?'💰 Facturado':'⏳ Sin facturar'}</span>
+        ${a.estadoPago? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${pagoLabel(a.estadoPago)}</span>`:""}
         ${a.terminadoEn? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${new Date(a.terminadoEn).toLocaleDateString('es-ES')}</span>`:''}
         ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
       </div>
@@ -1387,6 +1417,7 @@ function renderArchivo(){
         </div></div>
         <div class="meta">
           <span class="badge ${a.facturado?'facturado':'sinfacturar'}">${a.facturado?'💰 Facturado':'⏳ Sin facturar'}</span>
+        ${a.estadoPago? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${pagoLabel(a.estadoPago)}</span>`:""}
           ${a.fecha? `<span class="mono" style="font-size:12px;color:var(--text-soft)">${fmtDate(a.fecha)}</span>`:''}
           ${a.operario? `<span class="mono" style="font-size:12px;color:var(--copper-dark)">👤 ${escapeHtml(a.operario)}</span>`:''}
         </div>
@@ -1435,7 +1466,16 @@ function openParteArchivado(id){
     <div class="btn-row" style="margin-top:8px">
       <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'facturacion')}">👁️ Ver / volver a generar</a>
     </div>
-    <div class="btn-row" style="margin-top:8px">
+
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin:16px 0 8px;font-weight:600;">¿Cómo queda el pago?</label>
+    <div class="urg-picker" id="pago-picker" style="flex-wrap:wrap;gap:8px;">
+      <div class="urg-btn pago-btn ${a.estadoPago==='cobrado'?'active':''}" data-p="cobrado" style="flex:1 1 45%;">💶 Cobrado</div>
+      <div class="urg-btn pago-btn ${a.estadoPago==='bizum'?'active':''}" data-p="bizum" style="flex:1 1 45%;">📱 Bizum</div>
+      <div class="urg-btn pago-btn ${a.estadoPago==='facturar'?'active':''}" data-p="facturar" style="flex:1 1 45%;">🧾 Para facturar</div>
+      <div class="urg-btn pago-btn ${a.estadoPago==='definir'?'active':''}" data-p="definir" style="flex:1 1 45%;">❓ A definir</div>
+    </div>
+
+    <div class="btn-row" style="margin-top:16px">
       <button class="btn ${a.facturado?'btn-outline':'btn-secondary'}" id="arch-toggle-facturado">${a.facturado? '↩️ Marcar como sin facturar' : '💰 Marcar como facturado'}</button>
     </div>
     <div class="btn-row" style="margin-top:16px">
@@ -1445,6 +1485,16 @@ function openParteArchivado(id){
   `);
   document.getElementById('arch-compartir-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
   document.getElementById('arch-compartir-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
+  document.querySelectorAll('#pago-picker .pago-btn').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      a.estadoPago = b.dataset.p;
+      await saveAvisos();
+      document.querySelectorAll('#pago-picker .pago-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      mostrarToast(`✓ ${pagoLabel(a.estadoPago)}`);
+      renderArchivo(); renderRealizados();
+    });
+  });
   document.getElementById('arch-toggle-facturado').addEventListener('click', async ()=>{
     a.facturado = !a.facturado;
     await saveAvisos();
@@ -1504,6 +1554,16 @@ document.getElementById('landing-logo').src = 'data:image/png;base64,iVBORw0KGgo
   }
 })();
 
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState === 'visible'){
+    try{
+      const v = await fsGet(STORE_KEY);
+      if(v){ AVISOS = JSON.parse(v); }
+    }catch(e){ console.error('No se pudo refrescar al volver a la pantalla', e); }
+    refrescarVistaActiva();
+  }
+});
+
 function parteUrl(a, tipo){
   return location.origin + location.pathname + '?parte=' + a.id + '&tipo=' + tipo;
 }
@@ -1556,6 +1616,11 @@ function buildParteHTML(a, tipo){
       <div class="trabajo">
         <div class="lab">Horas trabajadas</div>
         <div class="txt" style="font-size:18px;font-weight:700;">${a.horas!=null? a.horas+' h' : '—'}</div>
+      </div>
+      <div class="bloque">
+        <div class="lab">Estado del pago</div>
+        <div class="val" style="font-weight:700;">${pagoLabel(a.estadoPago)}</div>
+        ${a.observacionesFactura? `<div class="lab" style="margin-top:8px">Observaciones</div><div class="val">${escapeHtml(a.observacionesFactura)}</div>`:''}
       </div>
       <div class="bloque">
         <div class="lab">Materiales empleados</div>
