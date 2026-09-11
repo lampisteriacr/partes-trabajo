@@ -154,9 +154,7 @@
     display:flex; align-items:center; padding:0 6px; overflow:hidden; white-space:nowrap; cursor:pointer;
     font-weight:600;
   }
-  .timeline-block[data-urg="alta"]{background:var(--urgente);}
-  .timeline-block[data-urg="media"]{background:var(--normal); color:#2b2200;}
-  .timeline-block[data-urg="baja"]{background:var(--baja);}
+  .timeline-block{ color:#fff; }
   .timeline-sinhora{ font-size:10px; color:var(--text-soft); margin-left:74px; margin-bottom:6px; }
 
   /* ---- detail sheet ---- */
@@ -757,6 +755,7 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
   const ventanaWa = window.open('', '_blank');
   AVISOS.push(aviso);
   await saveAvisos();
+  mostrarToast(`✓ Aviso Nº${aviso.numero} creado`);
   if(ventanaWa){
     ventanaWa.location.href = waUrl(telefono, buildMensaje(aviso));
   }else{
@@ -885,6 +884,11 @@ function openDetalle(id){
     </div>
 
     <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Hora acordada con el cliente</label>
+      <input type="time" id="d-hora" value="${a.hora||''}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+    </div>
+
+    <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Duración estimada</label>
       <div class="stepper">
         <button type="button" id="d-dur-menos">−</button>
@@ -922,6 +926,12 @@ function openDetalle(id){
     guardarDuracion();
   });
   durInput2.addEventListener('change', guardarDuracion);
+  document.getElementById('d-hora').addEventListener('change', async (e)=>{
+    a.hora = e.target.value;
+    await saveAvisos();
+    renderPendientes(); renderCalendario();
+    mostrarToast(a.hora ? `✓ Hora guardada: ${a.hora}` : 'Hora quitada');
+  });
   document.getElementById('d-reenviar').addEventListener('click', ()=>{
     window.open(waUrl(a.telefono, buildMensaje(a)), '_blank');
   });
@@ -989,7 +999,7 @@ function renderOpGrid(a){
   const seleccionados = operariosDe(a);
   grid.innerHTML = OPERARIOS.map(op=>{
     const ocupado = !seleccionados.includes(op) && !!buscarChoque(a, op);
-    return `<button class="op-btn ${seleccionados.includes(op)?'active':''} ${ocupado?'ocupado':''}" data-op="${escapeHtml(op)}">${escapeHtml(op)}${ocupado?' 🔒':''}</button>`;
+    return `<button class="op-btn ${seleccionados.includes(op)?'active':''} ${ocupado?'ocupado':''}" data-op="${escapeHtml(op)}">${seleccionados.includes(op)?'✓ ':''}${escapeHtml(op)}${ocupado?' 🔒':''}</button>`;
   }).join('');
   grid.querySelectorAll('.op-btn').forEach(b=>{
     b.addEventListener('click', async ()=>{
@@ -1182,6 +1192,14 @@ function setupSigPad(){
 
 // ---------- calendario ----------
 const TL_INICIO = 7, TL_FIN = 20; // franja visible: 7:00 a 20:00
+const PALETA_OPERARIOS = ['#C97A2B','#2F6A1C','#1F5C8A','#8A2F6A','#8A6D1F','#2F8A7A','#8A2F2F','#4F4F8A'];
+function colorPorTexto(txt){
+  let hash = 0;
+  for(let i=0;i<txt.length;i++) hash = (hash*31 + txt.charCodeAt(i)) >>> 0;
+  return PALETA_OPERARIOS[hash % PALETA_OPERARIOS.length];
+}
+function colorParaOperario(nombre){ return colorPorTexto(nombre); }
+function colorParaAviso(a){ return colorPorTexto(String(a.numero||a.id)); }
 function renderTimeline(dayAvisos){
   const porOperario = {};
   const sinHora = [];
@@ -1195,19 +1213,22 @@ function renderTimeline(dayAvisos){
   if(nombres.length===0) return '';
   const totalMin = (TL_FIN-TL_INICIO)*60;
   const marcas = [7,10,13,16,19];
+  const urgDot = {alta:'🔴', media:'🟡', baja:'🟢'};
   let html = `<div class="timeline-wrap">
     <div class="timeline-scale">${marcas.map(h=>`<span>${h}h</span>`).join('')}</div>`;
   nombres.forEach(op=>{
+    const colorFila = colorParaOperario(op);
     const bloques = porOperario[op].map(a=>{
       const r = rangoHoras(a);
       const ini = Math.max(r.ini, TL_INICIO*60);
       const fin = Math.min(r.fin, TL_FIN*60);
       const left = ((ini - TL_INICIO*60)/totalMin*100).toFixed(2);
       const width = Math.max(3, ((fin-ini)/totalMin*100)).toFixed(2);
-      return `<div class="timeline-block" data-urg="${a.urgencia}" data-id="${a.id}" style="left:${left}%;width:${width}%" title="${escapeHtml(a.cliente)} · ${a.hora}">${escapeHtml(a.cliente)}</div>`;
+      const colorBloque = colorParaAviso(a);
+      return `<div class="timeline-block" data-id="${a.id}" style="left:${left}%;width:${width}%;background:${colorBloque}" title="${escapeHtml(a.cliente)} · ${a.hora} · Nº${a.numero}">${urgDot[a.urgencia]||''} ${escapeHtml(a.cliente)}</div>`;
     }).join('');
     html += `<div class="timeline-row">
-      <div class="timeline-nombre">${escapeHtml(op)}</div>
+      <div class="timeline-nombre"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colorFila};margin-right:4px;"></span>${escapeHtml(op)}</div>
       <div class="timeline-track">${bloques}</div>
     </div>`;
   });
