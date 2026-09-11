@@ -1288,8 +1288,18 @@ function openParteRealizado(id){
       <button class="btn btn-primary" id="real-compartir">📤 Reenviar PDF al cliente</button>
     </div>
     <div class="fab-hint">Abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto.</div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-danger" id="real-borrar">🗑️ Eliminar aviso</button>
+    </div>
   `);
   document.getElementById('real-compartir').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+  document.getElementById('real-borrar').addEventListener('click', async ()=>{
+    if(confirm('¿Eliminar este aviso definitivamente? No se puede deshacer.')){
+      AVISOS = AVISOS.filter(x=>x.id!==id);
+      await saveAvisos();
+      closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
+    }
+  });
 }
 function renderArchivo(){
   const q = (document.getElementById('buscar-arch').value||'').toLowerCase();
@@ -1375,6 +1385,9 @@ function openParteArchivado(id){
     <div class="btn-row" style="margin-top:8px">
       <button class="btn ${a.facturado?'btn-outline':'btn-secondary'}" id="arch-toggle-facturado">${a.facturado? '↩️ Marcar como sin facturar' : '💰 Marcar como facturado'}</button>
     </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-danger" id="arch-borrar">🗑️ Eliminar aviso</button>
+    </div>
     <div class="fab-hint">"Enviar PDF" abre el menú de compartir del móvil con el archivo ya adjunto (WhatsApp, correo...).</div>
   `);
   document.getElementById('arch-compartir-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
@@ -1383,6 +1396,13 @@ function openParteArchivado(id){
     a.facturado = !a.facturado;
     await saveAvisos();
     closeOverlay(); renderArchivo(); renderRealizados();
+  });
+  document.getElementById('arch-borrar').addEventListener('click', async ()=>{
+    if(confirm('¿Eliminar este aviso definitivamente? No se puede deshacer.')){
+      AVISOS = AVISOS.filter(x=>x.id!==id);
+      await saveAvisos();
+      closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
+    }
   });
 }
 
