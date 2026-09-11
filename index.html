@@ -930,6 +930,11 @@ function openDetalle(id){
     a.hora = e.target.value;
     await saveAvisos();
     renderPendientes(); renderCalendario();
+    renderOpGrid(a);
+    const choques = operariosDe(a).map(op=>buscarChoque(a, op)).filter(Boolean);
+    if(choques.length){
+      alert('⚠️ Ojo, ahora choca con otro trabajo:\n' + choques.join('\n'));
+    }
     mostrarToast(a.hora ? `✓ Hora guardada: ${a.hora}` : 'Hora quitada');
   });
   document.getElementById('d-reenviar').addEventListener('click', ()=>{
