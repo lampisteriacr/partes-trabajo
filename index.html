@@ -695,16 +695,47 @@ function activarAutocompletarDireccion(inputEl, cajaEl, estadoEl, onElegir){
     }
   });
 }
+const EQUIVALENCIAS_VIA = [
+  [/\bcalle\b/gi, 'carrer'], [/\bavenida\b/gi, 'avinguda'], [/\bavda\.?\b/gi, 'avinguda'],
+  [/\bplaza\b/gi, 'plaça'], [/\bpaseo\b/gi, 'passeig'], [/\bcamino\b/gi, 'camí'],
+  [/\bcallejón\b/gi, 'carreró'], [/\btravesía\b/gi, 'travessera'], [/\bronda\b/gi, 'ronda'],
+  [/\bcarrer\b/gi, 'calle'], [/\bavinguda\b/gi, 'avenida'], [/\bplaça\b/gi, 'plaza'],
+  [/\bpasseig\b/gi, 'paseo'], [/\bcamí\b/gi, 'camino']
+];
+function traducirTipoVia(q){
+  let alt = q;
+  let cambiado = false;
+  for(const [patron, reemplazo] of EQUIVALENCIAS_VIA){
+    if(patron.test(alt)){
+      alt = alt.replace(patron, reemplazo);
+      cambiado = true;
+      break;
+    }
+  }
+  return cambiado ? alt : null;
+}
+async function nominatimBuscar(q){
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(q + ', España');
+  const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+  if(!res.ok) return { error: res.status };
+  const data = await res.json();
+  return { data };
+}
 async function buscarDireccionesEn(q, inputEl, cajaEl, estadoEl, onElegir){
   try{
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(q + ', España');
-    const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-    if(!res.ok){
-      if(estadoEl) estadoEl.textContent = `El buscador respondió con error (${res.status}). Puedes escribir la dirección a mano.`;
+    let { data, error } = await nominatimBuscar(q);
+    if(error){
+      if(estadoEl) estadoEl.textContent = `El buscador respondió con error (${error}). Puedes escribir la dirección a mano.`;
       cajaEl.innerHTML = '';
       return;
     }
-    const data = await res.json();
+    if((!data || data.length===0)){
+      const alt = traducirTipoVia(q);
+      if(alt){
+        const r2 = await nominatimBuscar(alt);
+        if(r2.data && r2.data.length){ data = r2.data; }
+      }
+    }
     if(!data || data.length===0){
       if(estadoEl) estadoEl.textContent = 'Sin coincidencias — puedes seguir escribiendo a mano.';
       cajaEl.innerHTML = '';
