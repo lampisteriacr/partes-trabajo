@@ -288,14 +288,15 @@
   .op-btn.active{background:var(--copper); border-color:var(--copper); color:#fff;}
   .op-btn.ocupado{background:#f3f0ea; color:var(--text-soft); border-style:dashed;}
   .mat-row{
-    display:flex; gap:6px; align-items:center; margin-bottom:8px;
+    display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap;
   }
   .mat-row input{
     padding:10px; border:1.5px solid var(--paper-line); border-radius:var(--radius);
     font-size:14px; font-family:inherit;
   }
-  .mat-row .mat-nombre{flex:2; min-width:0;}
+  .mat-row .mat-nombre{flex:1 1 100%; min-width:0;}
   .mat-row .mat-cant{flex:1; min-width:0;}
+  .mat-row .mat-precio{flex:1; min-width:0;}
   .mat-row .mat-quitar{
     background:none; border:none; color:var(--urgente); font-size:20px; cursor:pointer;
     padding:0 4px; font-weight:700; line-height:1;
@@ -590,18 +591,24 @@ async function saveConfig(){
 function pagoLabel(p){
   return p==='cobrado'?'💶 Cobrado': p==='bizum'?'📱 Bizum': p==='facturar'?'🧾 Para facturar': p==='definir'?'❓ A definir':'—';
 }
+function totalMateriales(a){
+  return (a.materiales||[]).reduce((s,m)=> s + (m.precio!=null && !isNaN(m.precio) ? m.precio*(m.cantidad||1) : 0), 0);
+}
 function buildFacturacionTexto(a){
-  const materialesTxt = (a.materiales||[]).map(m=>`- ${m.nombre}${m.cantidad?` x${m.cantidad}`:''}`).join('\n') || 'Ninguno';
+  const materialesTxt = (a.materiales||[]).map(m=>`- ${m.nombre}${m.cantidad?` x${m.cantidad}`:''}${m.precio!=null?` · ${m.precio}€/ud`:''}`).join('\n') || 'Ninguno';
+  const total = totalMateriales(a);
   return `FACTURAR — Parte Nº${a.numero}\n`+
     `Cliente: ${a.cliente}\n`+
     `Dirección: ${a.direccion||'-'}\n`+
     `Fecha: ${a.fecha?fmtDate(a.fecha):''}\n`+
     `Hora acordada: ${a.hora||'-'}${a.duracion!=null? ' ('+a.duracion+'h estimadas)':''}\n`+
     `Operario: ${a.operario||'-'}\n`+
+    `Horario trabajado: ${a.horaTrabajoIni&&a.horaTrabajoFin? a.horaTrabajoIni+' a '+a.horaTrabajoFin : '-'}\n`+
     `Horas trabajadas: ${a.horas!=null?a.horas:'-'}\n`+
     `Estado del pago: ${pagoLabel(a.estadoPago)}\n`+
     (a.observacionesFactura? `Observaciones: ${a.observacionesFactura}\n`:'')+
-    `Materiales:\n${materialesTxt}`;
+    `Materiales:\n${materialesTxt}`+
+    (total>0? `\nTotal materiales: ${total.toFixed(2)}€`:'');
 }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function siguienteNumero(){ return String(AVISOS.length+1).padStart(5,'0'); }
@@ -672,51 +679,53 @@ function direccionCompleta(){
   return piso ? `${calle}, ${piso}` : calle;
 }
 
-// ---------- autocompletar dirección (OpenStreetMap, gratis, sin clave) ----------
-let direccionValidada = false;
-let sugTimeout = null;
-const inputDireccion = document.getElementById('f-direccion');
-const cajaSugerencias = document.getElementById('direccion-sugerencias');
-const estadoDireccion = document.getElementById('direccion-estado');
-inputDireccion.addEventListener('input', ()=>{
-  direccionValidada = false;
-  const q = inputDireccion.value.trim();
-  clearTimeout(sugTimeout);
-  if(q.length < 4){ cajaSugerencias.innerHTML=''; estadoDireccion.textContent=''; return; }
-  estadoDireccion.textContent = 'Buscando...';
-  sugTimeout = setTimeout(()=> buscarDirecciones(q), 500);
-});
-async function buscarDirecciones(q){
+// ---------- autocompletar dirección (OpenStreetMap, gratis, sin clave) — reutilizable ----------
+function activarAutocompletarDireccion(inputEl, cajaEl, estadoEl, onElegir){
+  let sugTimeout = null;
+  inputEl.addEventListener('input', ()=>{
+    const q = inputEl.value.trim();
+    clearTimeout(sugTimeout);
+    if(q.length < 4){ cajaEl.innerHTML=''; if(estadoEl) estadoEl.textContent=''; return; }
+    if(estadoEl) estadoEl.textContent = 'Buscando...';
+    sugTimeout = setTimeout(()=> buscarDireccionesEn(q, inputEl, cajaEl, estadoEl, onElegir), 500);
+  });
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('#'+inputEl.id) && !e.target.closest('#'+cajaEl.id)){
+      cajaEl.innerHTML = '';
+    }
+  });
+}
+async function buscarDireccionesEn(q, inputEl, cajaEl, estadoEl, onElegir){
   try{
     const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q=' + encodeURIComponent(q + ', España');
     const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
     if(!res.ok){
-      estadoDireccion.textContent = `El buscador respondió con error (${res.status}). Puedes escribir la dirección a mano.`;
-      cajaSugerencias.innerHTML = '';
+      if(estadoEl) estadoEl.textContent = `El buscador respondió con error (${res.status}). Puedes escribir la dirección a mano.`;
+      cajaEl.innerHTML = '';
       return;
     }
     const data = await res.json();
     if(!data || data.length===0){
-      estadoDireccion.textContent = 'Sin coincidencias — puedes seguir escribiendo a mano.';
-      cajaSugerencias.innerHTML = '';
+      if(estadoEl) estadoEl.textContent = 'Sin coincidencias — puedes seguir escribiendo a mano.';
+      cajaEl.innerHTML = '';
       return;
     }
-    estadoDireccion.textContent = '';
+    if(estadoEl) estadoEl.textContent = '';
     const limpias = data.map(direccionLimpia);
-    cajaSugerencias.innerHTML = data.map((d,i)=>
+    cajaEl.innerHTML = data.map((d,i)=>
       `<div class="sug-item" data-i="${i}">${escapeHtml(limpias[i])}</div>`
     ).join('');
-    cajaSugerencias.querySelectorAll('.sug-item').forEach(el=>{
+    cajaEl.querySelectorAll('.sug-item').forEach(el=>{
       el.addEventListener('click', ()=>{
-        inputDireccion.value = limpias[parseInt(el.dataset.i)];
-        direccionValidada = true;
-        cajaSugerencias.innerHTML = '';
-        estadoDireccion.textContent = '';
+        inputEl.value = limpias[parseInt(el.dataset.i)];
+        cajaEl.innerHTML = '';
+        if(estadoEl) estadoEl.textContent = '';
+        if(onElegir) onElegir(limpias[parseInt(el.dataset.i)]);
       });
     });
   }catch(e){
-    estadoDireccion.textContent = 'No se pudo conectar con el buscador de direcciones. Puedes escribir la dirección a mano.';
-    cajaSugerencias.innerHTML = '';
+    if(estadoEl) estadoEl.textContent = 'No se pudo conectar con el buscador de direcciones. Puedes escribir la dirección a mano.';
+    cajaEl.innerHTML = '';
   }
 }
 function direccionLimpia(d){
@@ -731,11 +740,12 @@ function direccionLimpia(d){
   const partes = [calleNum, ciudad, cp].filter(Boolean);
   return partes.length ? partes.join(', ') : (d.display_name||'');
 }
-document.addEventListener('click', (e)=>{
-  if(!e.target.closest('#f-direccion') && !e.target.closest('#direccion-sugerencias')){
-    cajaSugerencias.innerHTML = '';
-  }
-});
+
+let direccionValidada = false;
+const inputDireccion = document.getElementById('f-direccion');
+const cajaSugerencias = document.getElementById('direccion-sugerencias');
+const estadoDireccion = document.getElementById('direccion-estado');
+activarAutocompletarDireccion(inputDireccion, cajaSugerencias, estadoDireccion, ()=>{ direccionValidada = true; });
 
 // ---------- crear aviso ----------
 document.getElementById('f-fecha').value = todayISO();
@@ -881,10 +891,18 @@ function openDetalle(id){
     <h2>Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</h2>
     <div class="sub">${estadoLabel(a.estado)} · ${urgLabel(a.urgencia)}${a.fecha? ' · '+fmtDate(a.fecha):''}</div>
     <div class="kv"><b>Trabajo</b><span style="text-align:right;max-width:65%">${escapeHtml(a.trabajo)}</span></div>
-    ${a.direccion? `<div class="kv"><b>Dirección</b><span style="text-align:right;max-width:65%">${escapeHtml(a.direccion)}</span></div>`:''}
     ${a.telefono? `<div class="kv"><b>Teléfono</b><span>${escapeHtml(a.telefono)}</span></div>`:''}
 
-    ${a.direccion? `<div class="btn-row" style="margin-top:14px"><a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}">📍 Abrir en Maps</a></div>`:''}
+    <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Dirección</label>
+      <input type="text" id="d-direccion-calle" placeholder="Calle y número" value="${escapeHtml(a.direccionCalle||a.direccion||'')}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;" autocomplete="off">
+      <div id="d-direccion-estado" style="font-size:12px;color:var(--text-soft);margin-top:4px;"></div>
+      <div id="d-direccion-sugerencias" class="sugerencias"></div>
+      <input type="text" id="d-piso" placeholder="Piso / puerta (opcional)" value="${escapeHtml((a.direccion && a.direccionCalle && a.direccion.startsWith(a.direccionCalle+', ')) ? a.direccion.slice(a.direccionCalle.length+2) : '')}" style="width:100%;margin-top:8px;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+      <button class="btn btn-outline" id="d-guardar-direccion" style="margin-top:8px">Guardar dirección</button>
+    </div>
+
+    <div class="btn-row" style="margin-top:14px" id="d-maps-row">${a.direccion? `<a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}" id="d-maps-link">📍 Abrir en Maps</a>`:''}</div>
     <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-outline" id="d-reenviar">↻ Reenviar por WhatsApp</button>
     </div>
@@ -937,6 +955,23 @@ function openDetalle(id){
     guardarDuracion();
   });
   durInput2.addEventListener('change', guardarDuracion);
+  activarAutocompletarDireccion(
+    document.getElementById('d-direccion-calle'),
+    document.getElementById('d-direccion-sugerencias'),
+    document.getElementById('d-direccion-estado')
+  );
+  document.getElementById('d-guardar-direccion').addEventListener('click', async ()=>{
+    const calle = document.getElementById('d-direccion-calle').value.trim();
+    const piso = document.getElementById('d-piso').value.trim();
+    if(!calle){ alert('Pon al menos la calle y número.'); return; }
+    a.direccionCalle = calle;
+    a.direccion = piso ? `${calle}, ${piso}` : calle;
+    await saveAvisos();
+    renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
+    const mapsRow = document.getElementById('d-maps-row');
+    mapsRow.innerHTML = `<a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}" id="d-maps-link">📍 Abrir en Maps</a>`;
+    mostrarToast('✓ Dirección guardada');
+  });
   document.getElementById('d-fecha').addEventListener('change', async (e)=>{
     a.fecha = e.target.value;
     await saveAvisos();
@@ -1001,6 +1036,12 @@ function fmtHora(mins){
   const h = Math.floor((mins%1440)/60);
   const m = mins%60;
   return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+function horasFacturables(minutos){
+  if(minutos <= 60) return 1;
+  const extra = minutos - 60;
+  const bloques = Math.ceil(extra/30);
+  return 1 + bloques*0.5;
 }
 function buscarChoque(a, operario){
   const r1 = rangoHoras(a);
@@ -1067,7 +1108,14 @@ function openFirma(id){
 
     <div class="section-label" style="margin-top:4px">Para facturar (uso interno)</div>
 
-    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:6px;font-weight:600;">Horas trabajadas</label>
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:6px;font-weight:600;">De qué hora a qué hora (opcional)</label>
+    <div style="display:flex;gap:8px;margin-bottom:6px;">
+      <input type="time" id="f-hora-ini" value="${a.horaTrabajoIni||''}" style="flex:1;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+      <input type="time" id="f-hora-fin" value="${a.horaTrabajoFin||''}" style="flex:1;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+    </div>
+    <div class="fab-hint" style="margin-top:0;margin-bottom:10px;text-align:left;">La 1ª hora se cobra entera aunque trabajes menos; luego se redondea a la media hora. Si lo rellenas, calcula las horas de abajo — puedes ajustarlas a mano después.</div>
+
+    <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:6px;font-weight:600;">Horas trabajadas (a facturar)</label>
     <div class="stepper" style="margin-bottom:16px">
       <button type="button" id="horas-menos">−</button>
       <input type="number" id="f-horas" step="0.5" min="0" value="${a.horas!=null?a.horas:1}">
@@ -1103,6 +1151,18 @@ function openFirma(id){
   `);
   setupSigPad();
   renderMatList();
+  const calcularDesdeHoras = ()=>{
+    const ini = document.getElementById('f-hora-ini').value;
+    const fin = document.getElementById('f-hora-fin').value;
+    if(!ini || !fin) return;
+    const [hi,mi] = ini.split(':').map(Number);
+    const [hf,mf] = fin.split(':').map(Number);
+    let minutos = (hf*60+mf) - (hi*60+mi);
+    if(minutos <= 0) minutos += 24*60;
+    document.getElementById('f-horas').value = horasFacturables(minutos);
+  };
+  document.getElementById('f-hora-ini').addEventListener('change', calcularDesdeHoras);
+  document.getElementById('f-hora-fin').addEventListener('change', calcularDesdeHoras);
   document.getElementById('horas-menos').addEventListener('click', ()=>{
     const inp = document.getElementById('f-horas');
     inp.value = Math.max(0, (parseFloat(inp.value)||0) - 0.5);
@@ -1121,7 +1181,13 @@ function openFirma(id){
     btn.textContent = 'Generando parte...';
     leerMatList();
     a.horas = parseFloat(document.getElementById('f-horas').value) || 0;
-    a.materiales = materialesTmp.filter(m=>m.nombre.trim());
+    a.horaTrabajoIni = document.getElementById('f-hora-ini').value;
+    a.horaTrabajoFin = document.getElementById('f-hora-fin').value;
+    a.materiales = materialesTmp.filter(m=>m.nombre.trim()).map(m=>({
+      nombre: m.nombre,
+      cantidad: m.cantidad,
+      precio: (m.precio!==undefined && m.precio!=='') ? parseFloat(String(m.precio).replace(',','.')) : null
+    }));
     a.observacionesFactura = document.getElementById('f-obs-factura').value.trim();
     a.notasFinal = document.getElementById('f-notas').value.trim();
     a.emailCliente = document.getElementById('f-email').value.trim();
@@ -1170,6 +1236,7 @@ function renderMatList(){
     <div class="mat-row" data-i="${i}">
       <input class="mat-nombre" type="text" placeholder="Material" value="${escapeHtml(m.nombre||'')}">
       <input class="mat-cant" type="text" inputmode="decimal" placeholder="Cant." value="${m.cantidad!=null?m.cantidad:''}">
+      <input class="mat-precio" type="text" inputmode="decimal" placeholder="€ (opc.)" value="${m.precio!=null?m.precio:''}">
       <button type="button" class="mat-quitar" aria-label="Quitar">×</button>
     </div>
   `).join('');
@@ -1189,7 +1256,8 @@ function leerMatList(){
   rows.forEach((row,i)=>{
     materialesTmp[i] = {
       nombre: row.querySelector('.mat-nombre').value,
-      cantidad: row.querySelector('.mat-cant').value
+      cantidad: row.querySelector('.mat-cant').value,
+      precio: row.querySelector('.mat-precio').value
     };
   });
 }
@@ -1458,7 +1526,7 @@ function openParteArchivado(id){
     <div class="kv"><b>Horas</b><span>${a.horas!=null?a.horas:'—'}</span></div>
     <div class="kv" style="border-bottom:none;flex-direction:column;align-items:flex-start;gap:4px">
       <b>Materiales</b>
-      <span style="font-size:13.5px">${(a.materiales&&a.materiales.length)? a.materiales.map(m=>escapeHtml(m.nombre)+(m.cantidad?' ×'+escapeHtml(String(m.cantidad)):'')).join('<br>') : 'Ninguno'}</span>
+      <span style="font-size:13.5px">${(a.materiales&&a.materiales.length)? a.materiales.map(m=>escapeHtml(m.nombre)+(m.cantidad?' ×'+escapeHtml(String(m.cantidad)):'')+(m.precio!=null?' · '+m.precio+'€/ud':'')).join('<br>') : 'Ninguno'}${totalMateriales(a)>0? `<br><b>Total: ${totalMateriales(a).toFixed(2)}€</b>`:''}</span>
     </div>
     <div class="btn-row" style="margin-top:10px">
       <button class="btn btn-primary" id="arch-compartir-factura">📤 Enviar PDF a facturación</button>
@@ -1603,7 +1671,11 @@ function buildParteHTML(a, tipo){
       <div class="foot-ribbon"><span class="ref">Nº ${a.numero||'—'}${a.fecha? ' · '+fmtDate(a.fecha):''}</span><span class="brand">LAMPISTERÍA CR</span></div>
     `;
   }else{
-    const filasMat = (a.materiales||[]).map(m=>`<tr><td>${escapeHtml(m.nombre)}</td><td>${m.cantidad!=null?escapeHtml(String(m.cantidad)):''}</td></tr>`).join('');
+    const filasMat = (a.materiales||[]).map(m=>{
+      const importe = (m.precio!=null && !isNaN(m.precio)) ? (m.precio*(m.cantidad||1)).toFixed(2)+'€' : '';
+      return `<tr><td>${escapeHtml(m.nombre)}</td><td>${m.cantidad!=null?escapeHtml(String(m.cantidad)):''}</td><td>${m.precio!=null?escapeHtml(String(m.precio))+'€':''}</td><td>${importe}</td></tr>`;
+    }).join('');
+    const totalMat = totalMateriales(a);
     return cabecera + `
       <div class="bloque">
         <div class="lab">Cliente</div>
@@ -1616,6 +1688,7 @@ function buildParteHTML(a, tipo){
       <div class="trabajo">
         <div class="lab">Horas trabajadas</div>
         <div class="txt" style="font-size:18px;font-weight:700;">${a.horas!=null? a.horas+' h' : '—'}</div>
+        ${a.horaTrabajoIni&&a.horaTrabajoFin? `<div style="font-size:12px;color:var(--text-soft);margin-top:2px;">${a.horaTrabajoIni} a ${a.horaTrabajoFin}</div>`:''}
       </div>
       <div class="bloque">
         <div class="lab">Estado del pago</div>
@@ -1625,9 +1698,10 @@ function buildParteHTML(a, tipo){
       <div class="bloque">
         <div class="lab">Materiales empleados</div>
         <table class="tabla-pdf">
-          <thead><tr><th>Material</th><th>Cantidad</th></tr></thead>
-          <tbody>${filasMat || '<tr><td colspan="2" style="color:var(--text-soft)">Ninguno</td></tr>'}</tbody>
+          <thead><tr><th>Material</th><th>Cant.</th><th>Precio</th><th>Importe</th></tr></thead>
+          <tbody>${filasMat || '<tr><td colspan="4" style="color:var(--text-soft)">Ninguno</td></tr>'}</tbody>
         </table>
+        ${totalMat>0? `<div style="text-align:right;font-weight:700;margin-top:6px;font-size:14px;">Total materiales: ${totalMat.toFixed(2)}€</div>`:''}
       </div>
       <div class="foot-ribbon"><span class="ref">Nº ${a.numero||'—'} · interno</span><span class="brand">LAMPISTERÍA CR</span></div>
     `;
