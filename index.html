@@ -1044,7 +1044,13 @@ function openDetalle(id){
     }
   });
   const termBtn = document.getElementById('d-terminar');
-  if(termBtn) termBtn.addEventListener('click', ()=> openFirma(id));
+  if(termBtn) termBtn.addEventListener('click', ()=>{
+    if(!operariosDe(a).length){
+      alert('⚠️ Asigna primero un operario antes de cerrar el trabajo.');
+      return;
+    }
+    openFirma(id);
+  });
   document.getElementById('d-borrar').addEventListener('click', async ()=>{
     if(confirm('¿Eliminar este aviso definitivamente?')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
@@ -1203,6 +1209,7 @@ function openFirma(id){
     inp.value = (parseFloat(inp.value)||0) + 0.5;
   });
   document.getElementById('mat-add').addEventListener('click', ()=>{
+    leerMatList();
     materialesTmp.push({nombre:'', cantidad:1});
     renderMatList();
   });
