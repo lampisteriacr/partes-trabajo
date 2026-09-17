@@ -927,7 +927,11 @@ function openDetalle(id){
     <h2>Nº${a.numero||'—'} · ${escapeHtml(a.cliente)}</h2>
     <div class="sub">${estadoLabel(a.estado)} · ${urgLabel(a.urgencia)}${a.fecha? ' · '+fmtDate(a.fecha):''}</div>
     <div class="kv"><b>Trabajo</b><span style="text-align:right;max-width:65%">${escapeHtml(a.trabajo)}</span></div>
-    ${a.telefono? `<div class="kv"><b>Teléfono</b><span>${escapeHtml(a.telefono)}</span></div>`:''}
+
+    <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Teléfono del cliente</label>
+      <input type="tel" id="d-telefono" placeholder="34600000000" value="${escapeHtml(a.telefono||'')}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+    </div>
 
     <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Dirección</label>
@@ -996,6 +1000,11 @@ function openDetalle(id){
     document.getElementById('d-direccion-sugerencias'),
     document.getElementById('d-direccion-estado')
   );
+  document.getElementById('d-telefono').addEventListener('change', async (e)=>{
+    a.telefono = e.target.value.trim();
+    await saveAvisos();
+    mostrarToast(a.telefono ? '✓ Teléfono guardado' : 'Teléfono quitado');
+  });
   document.getElementById('d-guardar-direccion').addEventListener('click', async ()=>{
     const calle = document.getElementById('d-direccion-calle').value.trim();
     const piso = document.getElementById('d-piso').value.trim();
@@ -1254,9 +1263,13 @@ function mostrarConfirmacionCierre(a){
     <h2>✅ Trabajo cerrado — Nº${a.numero}</h2>
     <div class="sub">${escapeHtml(a.cliente)}</div>
     <div class="btn-row" style="margin-top:16px">
-      <button class="btn btn-primary" id="conf-enviar-cliente">📤 Enviar parte al cliente</button>
+      <button class="btn btn-primary" id="conf-enviar-cliente">📤 Enviar PDF al cliente</button>
     </div>
-    <div class="fab-hint">Se abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto.</div>
+    <div class="fab-hint">Se abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto. Tú eliges el contacto a mano.</div>
+    ${a.telefono? `<div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-outline" id="conf-enviar-wa-directo">📱 Enviar enlace por WhatsApp a ${escapeHtml(a.telefono)}</button>
+    </div>
+    <div class="fab-hint">Va directo a su chat, ya con el número puesto — pero manda un enlace, no el PDF adjunto.</div>`:''}
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-outline" id="conf-enviar-factura">📤 Enviar a facturación</button>
     </div>
@@ -1267,6 +1280,13 @@ function mostrarConfirmacionCierre(a){
   document.getElementById('conf-enviar-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
   document.getElementById('conf-enviar-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
   document.getElementById('conf-cerrar').addEventListener('click', closeOverlay);
+  const waDirecto = document.getElementById('conf-enviar-wa-directo');
+  if(waDirecto){
+    waDirecto.addEventListener('click', ()=>{
+      const msg = `Hola ${a.cliente}, aquí tiene el parte del trabajo realizado:\n${parteUrl(a,'cliente')}`;
+      window.open(waUrl(a.telefono, msg), '_blank');
+    });
+  }
 }
 function renderMatList(){
   const cont = document.getElementById('mat-list');
@@ -1481,12 +1501,23 @@ function openParteRealizado(id){
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-primary" id="real-compartir">📤 Reenviar PDF al cliente</button>
     </div>
-    <div class="fab-hint">Abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto.</div>
+    <div class="fab-hint">Abre el menú de compartir del móvil (WhatsApp, correo...) con el PDF ya adjunto. Tú eliges el contacto a mano.</div>
+    ${a.telefono? `<div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-outline" id="real-enviar-wa-directo">📱 Enviar enlace por WhatsApp a ${escapeHtml(a.telefono)}</button>
+    </div>
+    <div class="fab-hint">Va directo a su chat, ya con el número puesto — pero manda un enlace, no el PDF adjunto.</div>`:''}
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-danger" id="real-borrar">🗑️ Eliminar aviso</button>
     </div>
   `);
   document.getElementById('real-compartir').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+  const realWaDirecto = document.getElementById('real-enviar-wa-directo');
+  if(realWaDirecto){
+    realWaDirecto.addEventListener('click', ()=>{
+      const msg = `Hola ${a.cliente}, aquí tiene el parte del trabajo realizado:\n${parteUrl(a,'cliente')}`;
+      window.open(waUrl(a.telefono, msg), '_blank');
+    });
+  }
   document.getElementById('real-borrar').addEventListener('click', async ()=>{
     if(confirm('¿Eliminar este aviso definitivamente? No se puede deshacer.')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
@@ -1561,6 +1592,9 @@ function openParteArchivado(id){
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-primary" id="arch-compartir-cliente">📤 Enviar PDF al cliente</button>
     </div>
+    ${a.telefono? `<div class="btn-row" style="margin-top:8px">
+      <button class="btn btn-outline" id="arch-enviar-wa-directo">📱 Enviar enlace por WhatsApp a ${escapeHtml(a.telefono)}</button>
+    </div>`:''}
     <div class="btn-row" style="margin-top:8px">
       <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'cliente')}">👁️ Ver / volver a generar</a>
     </div>
@@ -1595,6 +1629,13 @@ function openParteArchivado(id){
     <div class="fab-hint">"Enviar PDF" abre el menú de compartir del móvil con el archivo ya adjunto (WhatsApp, correo...).</div>
   `);
   document.getElementById('arch-compartir-cliente').addEventListener('click', ()=> compartirPDF(a, 'cliente'));
+  const archWaDirecto = document.getElementById('arch-enviar-wa-directo');
+  if(archWaDirecto){
+    archWaDirecto.addEventListener('click', ()=>{
+      const msg = `Hola ${a.cliente}, aquí tiene el parte del trabajo realizado:\n${parteUrl(a,'cliente')}`;
+      window.open(waUrl(a.telefono, msg), '_blank');
+    });
+  }
   document.getElementById('arch-compartir-factura').addEventListener('click', ()=> compartirPDF(a, 'facturacion'));
   document.querySelectorAll('#pago-picker .pago-btn').forEach(b=>{
     b.addEventListener('click', async ()=>{
