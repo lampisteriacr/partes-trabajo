@@ -1018,6 +1018,18 @@ function openDetalle(id){
     </div>
 
     <div style="margin-top:16px">
+      <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">Notas / Historial</label>
+      <div id="d-notas-lista">${(a.notasHistorial&&a.notasHistorial.length)? a.notasHistorial.map(n=>`
+        <div style="padding:8px 0;border-bottom:1px solid var(--paper-line);">
+          <div class="mono" style="font-size:11px;color:var(--text-soft);margin-bottom:2px;">${new Date(n.fecha).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</div>
+          <div style="font-size:14px;">${escapeHtml(n.texto)}</div>
+        </div>
+      `).join('') : `<div style="font-size:13px;color:var(--text-soft);">Sin notas todavía.</div>`}</div>
+      <textarea id="d-nota-nueva" placeholder="Ej: he ido pero no había nadie, vuelvo mañana..." style="margin-top:8px;"></textarea>
+      <button class="btn btn-outline" id="d-nota-add" style="margin-top:8px">+ Añadir nota</button>
+    </div>
+
+    <div style="margin-top:16px">
       <label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-soft);margin-bottom:8px;font-weight:600;">¿Quién lo hace?</label>
       <div class="op-grid" id="op-grid"></div>
       <button class="btn btn-outline" id="op-add" style="margin-top:8px">+ Añadir operario nuevo</button>
@@ -1060,6 +1072,15 @@ function openDetalle(id){
     a.telefono = e.target.value.trim();
     await guardarAviso(a);
     mostrarToast(a.telefono ? '✓ Teléfono guardado' : 'Teléfono quitado');
+  });
+  document.getElementById('d-nota-add').addEventListener('click', async ()=>{
+    const txt = document.getElementById('d-nota-nueva').value.trim();
+    if(!txt) return;
+    if(!Array.isArray(a.notasHistorial)) a.notasHistorial = [];
+    a.notasHistorial.push({ texto: txt, fecha: new Date().toISOString() });
+    await guardarAviso(a);
+    mostrarToast('✓ Nota añadida');
+    openDetalle(id);
   });
   document.getElementById('d-guardar-direccion').addEventListener('click', async ()=>{
     const calle = document.getElementById('d-direccion-calle').value.trim();
