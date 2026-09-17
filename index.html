@@ -448,6 +448,8 @@
     <div class="bloque">
       <div class="lab">Sr. / Sra.</div>
       <div class="val" id="landing-cliente"></div>
+      <div class="lab" style="margin-top:8px" id="landing-tel-lab">Teléfono</div>
+      <div class="val" id="landing-telefono"></div>
       <div class="lab" style="margin-top:8px">Lugar de trabajo</div>
       <div class="val" id="landing-direccion"></div>
       <a class="maps-btn" id="landing-maps" target="_blank" href="#">📍 Abrir en Google Maps</a>
@@ -677,6 +679,7 @@ function waUrl(tel, text){
 function buildMensaje(a){
   const link = location.origin + location.pathname + '?aviso=' + a.id;
   let t = `*Nuevo aviso Nº${a.numero}* (${urgLabel(a.urgencia)})\nCliente: ${a.cliente}\n`;
+  if(a.telefonoCliente) t += `Teléfono: ${a.telefonoCliente}\n`;
   if(a.direccion) t += `Dirección: ${a.direccion}\nMapa: ${mapsUrl(direccionMapa(a))}\n`;
   t += `Trabajo: ${a.trabajo}\n`;
   if(a.fecha) t += `Fecha prevista: ${fmtDate(a.fecha)}${a.hora? ' a las '+a.hora:''}\n`;
@@ -1794,6 +1797,7 @@ function buildParteHTML(a, tipo){
       <div class="bloque">
         <div class="lab">Sr. / Sra.</div>
         <div class="val">${escapeHtml(a.cliente)}</div>
+        ${a.telefonoCliente? `<div class="lab" style="margin-top:8px">Teléfono</div><div class="val">${escapeHtml(a.telefonoCliente)}</div>`:''}
         <div class="lab" style="margin-top:8px">Lugar de trabajo</div>
         <div class="val">${escapeHtml(a.direccion||'')}</div>
       </div>
@@ -1937,6 +1941,14 @@ function mostrarLanding(a){
   document.getElementById('landing-num').textContent = a.numero || '—';
   document.getElementById('landing-fecha').textContent = a.fecha ? fmtDate(a.fecha) + (a.hora? ' · '+a.hora+'h':'') : '—';
   document.getElementById('landing-cliente').textContent = a.cliente;
+  if(a.telefonoCliente){
+    document.getElementById('landing-telefono').textContent = a.telefonoCliente;
+    document.getElementById('landing-telefono').style.display = '';
+    document.getElementById('landing-tel-lab').style.display = '';
+  }else{
+    document.getElementById('landing-telefono').style.display = 'none';
+    document.getElementById('landing-tel-lab').style.display = 'none';
+  }
   document.getElementById('landing-direccion').textContent = a.direccion || 'No indicada';
   document.getElementById('landing-trabajo').textContent = a.trabajo;
   document.getElementById('landing-ref').textContent = 'Nº ' + (a.numero||'—') + (a.fecha ? ' · '+fmtDate(a.fecha) : '');
