@@ -479,7 +479,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -496,6 +496,9 @@ window.fsDoc = doc;
 window.fsGetDoc = getDoc;
 window.fsSetDoc = setDoc;
 window.fsOnSnapshot = onSnapshot;
+window.fsCollection = collection;
+window.fsDeleteDoc = deleteDoc;
+window.fsGetDocs = getDocs;
 const fbAuth = getAuth(fbApp);
 let authListo = signInAnonymously(fbAuth).catch(err=>{
   console.error('No se pudo identificar la app (login anónimo)', err);
@@ -537,30 +540,60 @@ function refrescarVistaActiva(){
   if(vistaActiva==='realizados') renderRealizados();
   if(vistaActiva==='archivo') renderArchivo();
 }
+async function migrarAvisosAntiguosSiHaceFalta(){
+  try{
+    const v = await fsGet(STORE_KEY);
+    if(!v) return;
+    const antiguos = JSON.parse(v);
+    if(!Array.isArray(antiguos) || antiguos.length===0) return;
+    for(const a of antiguos){
+      if(!a.id) continue;
+      const ref = window.fsDoc(window.fsDb, 'avisos', a.id);
+      await window.fsSetDoc(ref, a);
+    }
+    console.log('Migrados', antiguos.length, 'avisos antiguos a documentos independientes.');
+  }catch(e){
+    console.error('No se pudo migrar avisos antiguos', e);
+  }
+}
 function escucharAvisosEnVivo(){
   return new Promise((resolve)=>{
-    const ref = window.fsDoc(window.fsDb, 'kv', STORE_KEY);
+    const ref = window.fsCollection(window.fsDb, 'avisos');
     let primera = true;
-    window.fsOnSnapshot(ref, (snap)=>{
-      try{
-        AVISOS = (snap.exists() && snap.data().value) ? JSON.parse(snap.data().value) : [];
-      }catch(e){
-        console.error('Error leyendo avisos en vivo', e);
+    window.fsOnSnapshot(ref, async (snap)=>{
+      AVISOS = snap.docs.map(d=>d.data());
+      if(primera){
+        primera = false;
+        if(AVISOS.length===0){
+          await migrarAvisosAntiguosSiHaceFalta();
+          // la propia escucha recogerá los documentos migrados en el siguiente snapshot
+        }
+        resolve();
+      }else{
+        refrescarVistaActiva();
       }
-      if(primera){ primera = false; resolve(); }
-      else{ refrescarVistaActiva(); }
     }, (err)=>{
       console.error('No se pudo escuchar cambios en vivo', err);
       if(primera){ primera = false; resolve(); }
     });
   });
 }
-async function saveAvisos(){
+async function guardarAviso(a){
   try{
-    await fsSet(STORE_KEY, JSON.stringify(AVISOS));
+    const ref = window.fsDoc(window.fsDb, 'avisos', a.id);
+    await window.fsSetDoc(ref, a);
   }catch(e){
     console.error('No se pudo guardar', e);
     alert('No se pudo guardar. Revisa la conexión e inténtalo de nuevo.');
+  }
+}
+async function eliminarAviso(id){
+  try{
+    const ref = window.fsDoc(window.fsDb, 'avisos', id);
+    await window.fsDeleteDoc(ref);
+  }catch(e){
+    console.error('No se pudo eliminar', e);
+    alert('No se pudo eliminar. Revisa la conexión e inténtalo de nuevo.');
   }
 }
 async function loadOperarios(){
@@ -806,7 +839,7 @@ document.getElementById('btn-crear').addEventListener('click', async ()=>{
   };
   const ventanaWa = window.open('', '_blank');
   AVISOS.push(aviso);
-  await saveAvisos();
+  await guardarAviso(aviso);
   mostrarToast(`✓ Aviso Nº${aviso.numero} creado`);
   if(ventanaWa){
     ventanaWa.location.href = waUrl(telefono, buildMensaje(aviso));
@@ -983,7 +1016,7 @@ function openDetalle(id){
   const durInput2 = document.getElementById('d-duracion');
   const guardarDuracion = async ()=>{
     a.duracion = parseFloat(durInput2.value) || 0;
-    await saveAvisos();
+    await guardarAviso(a);
     renderPendientes(); renderCalendario();
   };
   document.getElementById('d-dur-menos').addEventListener('click', ()=>{
@@ -1002,7 +1035,7 @@ function openDetalle(id){
   );
   document.getElementById('d-telefono').addEventListener('change', async (e)=>{
     a.telefono = e.target.value.trim();
-    await saveAvisos();
+    await guardarAviso(a);
     mostrarToast(a.telefono ? '✓ Teléfono guardado' : 'Teléfono quitado');
   });
   document.getElementById('d-guardar-direccion').addEventListener('click', async ()=>{
@@ -1011,7 +1044,7 @@ function openDetalle(id){
     if(!calle){ alert('Pon al menos la calle y número.'); return; }
     a.direccionCalle = calle;
     a.direccion = piso ? `${calle}, ${piso}` : calle;
-    await saveAvisos();
+    await guardarAviso(a);
     renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     const mapsRow = document.getElementById('d-maps-row');
     mapsRow.innerHTML = `<a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}" id="d-maps-link">📍 Abrir en Maps</a>`;
@@ -1019,7 +1052,7 @@ function openDetalle(id){
   });
   document.getElementById('d-fecha').addEventListener('change', async (e)=>{
     a.fecha = e.target.value;
-    await saveAvisos();
+    await guardarAviso(a);
     renderPendientes(); renderCalendario();
     renderOpGrid(a);
     const choques = operariosDe(a).map(op=>buscarChoque(a, op)).filter(Boolean);
@@ -1030,7 +1063,7 @@ function openDetalle(id){
   });
   document.getElementById('d-hora').addEventListener('change', async (e)=>{
     a.hora = e.target.value;
-    await saveAvisos();
+    await guardarAviso(a);
     renderPendientes(); renderCalendario();
     renderOpGrid(a);
     const choques = operariosDe(a).map(op=>buscarChoque(a, op)).filter(Boolean);
@@ -1052,7 +1085,7 @@ function openDetalle(id){
       if(!sel.includes(n)) sel.push(n);
       a.operario = sel.join(' + ');
       if(a.estado==='pendiente') a.estado='asignado';
-      await saveAvisos();
+      await guardarAviso(a);
       renderOpGrid(a);
       renderPendientes(); renderCalendario();
     }
@@ -1068,7 +1101,7 @@ function openDetalle(id){
   document.getElementById('d-borrar').addEventListener('click', async ()=>{
     if(confirm('¿Eliminar este aviso definitivamente?')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
-      await saveAvisos();
+      await eliminarAviso(id);
       closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     }
   });
@@ -1140,7 +1173,7 @@ function renderOpGrid(a){
       a.operario = sel.join(' + ');
       if(a.estado==='pendiente' && sel.length) a.estado='asignado';
       if(a.estado==='asignado' && !sel.length) a.estado='pendiente';
-      await saveAvisos();
+      await guardarAviso(a);
       renderOpGrid(a);
       renderPendientes(); renderCalendario();
       mostrarToast(sel.includes(op) ? `✓ ${op} asignado` : `${op} quitado`);
@@ -1247,7 +1280,7 @@ function openFirma(id){
     a.estado = 'terminado';
     a.terminadoEn = new Date().toISOString();
     await generarYGuardarPDFs(a);
-    await saveAvisos();
+    await guardarAviso(a);
     renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     if(CONFIG.emailFacturacion){
       const body = buildFacturacionTexto(a) + '\n\nDocumento: ' + parteUrl(a,'facturacion');
@@ -1521,7 +1554,7 @@ function openParteRealizado(id){
   document.getElementById('real-borrar').addEventListener('click', async ()=>{
     if(confirm('¿Eliminar este aviso definitivamente? No se puede deshacer.')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
-      await saveAvisos();
+      await eliminarAviso(id);
       closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     }
   });
@@ -1640,7 +1673,7 @@ function openParteArchivado(id){
   document.querySelectorAll('#pago-picker .pago-btn').forEach(b=>{
     b.addEventListener('click', async ()=>{
       a.estadoPago = b.dataset.p;
-      await saveAvisos();
+      await guardarAviso(a);
       document.querySelectorAll('#pago-picker .pago-btn').forEach(x=>x.classList.remove('active'));
       b.classList.add('active');
       mostrarToast(`✓ ${pagoLabel(a.estadoPago)}`);
@@ -1649,13 +1682,13 @@ function openParteArchivado(id){
   });
   document.getElementById('arch-toggle-facturado').addEventListener('click', async ()=>{
     a.facturado = !a.facturado;
-    await saveAvisos();
+    await guardarAviso(a);
     closeOverlay(); renderArchivo(); renderRealizados();
   });
   document.getElementById('arch-borrar').addEventListener('click', async ()=>{
     if(confirm('¿Eliminar este aviso definitivamente? No se puede deshacer.')){
       AVISOS = AVISOS.filter(x=>x.id!==id);
-      await saveAvisos();
+      await eliminarAviso(id);
       closeOverlay(); renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
     }
   });
@@ -1710,8 +1743,8 @@ document.getElementById('landing-logo').src = 'data:image/png;base64,iVBORw0KGgo
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState === 'visible'){
     try{
-      const v = await fsGet(STORE_KEY);
-      if(v){ AVISOS = JSON.parse(v); }
+      const snap = await window.fsGetDocs(window.fsCollection(window.fsDb, 'avisos'));
+      AVISOS = snap.docs.map(d=>d.data());
     }catch(e){ console.error('No se pudo refrescar al volver a la pantalla', e); }
     refrescarVistaActiva();
   }
@@ -1904,7 +1937,7 @@ function mostrarLanding(a){
   document.getElementById('view-landing').classList.add('active');
   document.getElementById('landing-entrar').onclick = async ()=>{
     a.duracion = parseFloat(durInput.value) || 0;
-    await saveAvisos();
+    await guardarAviso(a);
     document.getElementById('view-landing').classList.remove('active');
     history.replaceState({}, '', location.pathname);
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
