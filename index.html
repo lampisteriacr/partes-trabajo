@@ -989,6 +989,9 @@ function openDetalle(id){
 
     <div class="btn-row" style="margin-top:14px" id="d-maps-row">${a.direccion? `<a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${mapsUrl(direccionMapa(a))}" id="d-maps-link">📍 Abrir en Maps</a>`:''}</div>
     <div class="btn-row" style="margin-top:8px">
+      <a class="btn btn-outline" style="text-decoration:none" target="_blank" href="${parteUrl(a,'cliente')}">🖨️ Ver / imprimir este parte</a>
+    </div>
+    <div class="btn-row" style="margin-top:8px">
       <button class="btn btn-outline" id="d-reenviar">↻ Reenviar por WhatsApp</button>
     </div>
 
