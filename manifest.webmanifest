@@ -1,0 +1,13 @@
+{
+  "name": "Lampistería CR · Partes",
+  "short_name": "Partes CR",
+  "description": "Gestión de reparaciones y registro de jornada de Lampistería CR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0f0b",
+  "theme_color": "#101410",
+  "icons": [
+    {"src":"app-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
