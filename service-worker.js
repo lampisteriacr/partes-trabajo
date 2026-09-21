@@ -1,4 +1,4 @@
-const CACHE = 'partes-cr-v2';
+const CACHE = 'partes-cr-v3';
 const APP_SHELL = ['./','./index.html','./manifest.webmanifest','./app-icon.svg','./app-icon-192.png','./app-icon-512.png','./apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
