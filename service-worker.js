@@ -1,5 +1,5 @@
-const CACHE = 'partes-cr-v1';
-const APP_SHELL = ['./','./index.html','./manifest.webmanifest','./app-icon.svg'];
+const CACHE = 'partes-cr-v2';
+const APP_SHELL = ['./','./index.html','./manifest.webmanifest','./app-icon.svg','./app-icon-192.png','./app-icon-512.png','./apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)));
