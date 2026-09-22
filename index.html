@@ -465,7 +465,7 @@ body:has(#login-gate:not(.hidden)) main,body:has(#login-gate:not(.hidden)) .tabb
   <div class="home-grid"><div class="home-panel"><div class="panel-title"><h3>La jornada de hoy</h3><button class="text-button" id="home-calendar">Ver agenda →</button></div><div id="home-today"></div></div><aside class="home-panel"><h3>Tu espacio de trabajo</h3><p>Los avisos, el equipo y los partes, siempre a mano.</p><button class="btn btn-outline" id="btn-install">Instalar en mi móvil</button><button class="btn btn-outline" id="btn-drafts">Borradores de este dispositivo</button><p class="small-note" id="install-help"></p><p class="small-note" id="backup-reminder"></p></aside></div>
   <div class="home-panel search-panel"><div class="panel-title"><h3>Encuentra un parte</h3><button class="text-button" id="filter-clear">Limpiar filtros</button></div>
     <label class="search-label" for="search-all">Cliente, teléfono, dirección, trabajo o número</label><input type="search" id="search-all" placeholder="Buscar en tus partes…">
-    <div class="filter-grid"><label>Operario<select id="filter-worker"><option value="">Todo el equipo</option></select></label><label>Estado<select id="filter-state"><option value="">Todos</option><option value="sin-fecha">Pendiente de agendar</option><option value="pendiente">Sin asignar</option><option value="asignado">Asignado</option><option value="terminado">Terminado</option></select></label><label>Pago<select id="filter-payment"><option value="">Todos</option><option value="sin-facturar">Pendiente de facturar</option><option value="facturado">Facturado</option><option value="cobrado">Cobrado</option><option value="bizum">Bizum</option><option value="facturar">Para facturar</option><option value="definir">A definir</option></select></label><label>Desde<input type="date" id="filter-from"></label><label>Hasta<input type="date" id="filter-to"></label></div>
+    <div class="filter-grid"><label>Operario<select id="filter-worker"><option value="">Todo el equipo</option></select></label><label>Estado<select id="filter-state"><option value="">Todos</option><option value="por-continuar">Pendiente de continuar</option><option value="sin-fecha">Pendiente de agendar</option><option value="pendiente">Sin asignar</option><option value="asignado">Asignado</option><option value="terminado">Terminado</option></select></label><label>Pago<select id="filter-payment"><option value="">Todos</option><option value="sin-facturar">Pendiente de facturar</option><option value="facturado">Facturado</option><option value="cobrado">Cobrado</option><option value="bizum">Bizum</option><option value="facturar">Para facturar</option><option value="definir">A definir</option></select></label><label>Desde<input type="date" id="filter-from"></label><label>Hasta<input type="date" id="filter-to"></label></div>
     <p class="small-note" id="search-count" role="status"></p><div id="search-results" class="result-grid"></div>
   </div>
 </section>
@@ -1034,13 +1034,15 @@ function renderPendientes(){
   let list = AVISOS.filter(a=>a.estado!=='terminado');
   if(q) list = list.filter(a => (a.cliente+a.direccion+a.trabajo).toLowerCase().includes(q));
   list.sort(ordenUrgencia);
-  const pend = list.filter(a=>a.estado==='pendiente');
-  const asig = list.filter(a=>a.estado==='asignado');
+  const continuar=list.filter(a=>a.pendienteContinuar);
+  const pend = list.filter(a=>a.estado==='pendiente'&&!a.pendienteContinuar);
+  const asig = list.filter(a=>a.estado==='asignado'&&!a.pendienteContinuar);
   cont.innerHTML='';
   if(list.length===0){
     cont.innerHTML = `<div class="empty"><div class="big">📭</div>Sin avisos pendientes.<br>Crea uno en la pestaña Nuevo.</div>`;
     return;
   }
+  if(continuar.length){cont.innerHTML+='<div class="section-label">↩ Pendientes de continuar ('+continuar.length+')</div>'+continuar.map(cardHtml).join('');}
   if(pend.length){
     cont.innerHTML += `<div class="section-label" style="color:var(--urgente)">🔴 Sin asignar <span class="count" style="background:var(--urgente)">${pend.length}</span></div>`;
     pend.forEach(a=> cont.innerHTML += cardHtml(a));
@@ -1507,7 +1509,7 @@ function openFirma(id){
     </div>
   `);
   setupSigPad();
-  restaurarFirma(a.firma);
+  restaurarFirma(a.pendienteContinuar?null:a.firma);
   renderMatList();
   montarFotos(a, 'cierre');
   const calcularDesdeHoras = ()=>{
@@ -1554,6 +1556,7 @@ function openFirma(id){
     if(!firmaTieneTrazo){ btn.disabled=false; btn.textContent='Guardar y marcar terminado'; alert('Falta la firma del cliente.'); return; }
     a.firma = sigCanvas.toDataURL('image/png');
     a.estado = 'terminado';
+    a.pendienteContinuar = false;
     a.terminadoEn = new Date().toISOString();
     try{
       await generarYGuardarPDFs(a);
@@ -2608,7 +2611,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.1.1', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.1.2', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -2660,9 +2663,11 @@ async function guardarAviso(a){
  const base=a.__base||(a.numero?TODOS_AVISOS.find(x=>x.id===a.id):null)||null;
  const snapshot=clone(a);validarAviso(snapshot);
  const patch=cambiosDe(base,snapshot);
+ if(snapshot.pendienteContinuar===true&&Object.hasOwn(patch,'notasHistorial')&&snapshot.terminadoEn===null&&snapshot.fecha===''&&snapshot.hora==='')for(const key of ['estado','pendienteContinuar','terminadoEn','fecha','hora'])patch[key]=snapshot[key];
  if(!esAdmin()){
   if(!base||!operariosDe(base).includes(usuarioActual.nombre))throw Error('Primero debes asignarte este trabajo.');
-  const allowed=['horas','horaTrabajoIni','horaTrabajoFin','materiales','observacionesFactura','notasFinal','emailCliente','firma','estado','terminadoEn','fotos','notasHistorial','duracion'];
+  const allowed=['horas','horaTrabajoIni','horaTrabajoFin','materiales','observacionesFactura','notasFinal','emailCliente','firma','estado','terminadoEn','fotos','notasHistorial','duracion','pendienteContinuar','historialReaperturas'];
+  if(snapshot.pendienteContinuar===true&&snapshot.estado!=='terminado'&&snapshot.fecha===''&&snapshot.hora===''&&snapshot.terminadoEn===null)allowed.push('fecha','hora');
   if(!base||Object.keys(patch).some(k=>!allowed.includes(k)))throw Error('Solo administración puede cambiar la asignación o los datos del aviso.');
  }
  if(!Object.keys(patch).length)return a;
@@ -2715,9 +2720,9 @@ function renderInicio(){
  document.getElementById('home-greeting').textContent='Hola, '+usuarioActual.nombre;
  document.getElementById('home-date').textContent=new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});
  const active=AVISOS.filter(a=>a.estado!=='terminado'),today=active.filter(a=>a.fecha===todayISO());
- const cards=[['Hoy',today.length,'hoy'],['Pendiente de agendar',active.filter(a=>!a.fecha).length,'sin-fecha'],['Urgentes',active.filter(a=>a.urgencia==='alta').length,'urgentes'],['Sin asignar',active.filter(a=>a.estado==='pendiente').length,'pendiente'],['Sin facturar',AVISOS.filter(a=>a.estado==='terminado'&&!a.facturado).length,'sin-facturar']];
+ const cards=[['Por continuar',active.filter(a=>a.pendienteContinuar).length,'por-continuar'],['Hoy',today.length,'hoy'],['Pendiente de agendar',active.filter(a=>!a.fecha).length,'sin-fecha'],['Urgentes',active.filter(a=>a.urgencia==='alta').length,'urgentes'],['Sin asignar',active.filter(a=>a.estado==='pendiente').length,'pendiente'],['Sin facturar',AVISOS.filter(a=>a.estado==='terminado'&&!a.facturado).length,'sin-facturar']];
  document.getElementById('home-metrics').innerHTML=cards.filter(x=>esAdmin()||!['pendiente','sin-facturar'].includes(x[2])).map(([label,n,key])=>`<button class="metric" data-metric="${key}"><span>${label}</span><strong>${n}</strong><small>Ver trabajos →</small></button>`).join('');
- document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{limpiarFiltros();const key=b.dataset.metric;if(key==='hoy'){document.getElementById('filter-from').value=todayISO();document.getElementById('filter-to').value=todayISO();}if(['pendiente','sin-fecha'].includes(key))document.getElementById('filter-state').value=key;if(key==='sin-facturar')document.getElementById('filter-payment').value=key;document.getElementById('search-all').dataset.urgente=key==='urgentes'?'1':'';renderBusqueda();document.querySelector('.search-panel').scrollIntoView({behavior:'smooth'});});
+ document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{limpiarFiltros();const key=b.dataset.metric;if(key==='hoy'){document.getElementById('filter-from').value=todayISO();document.getElementById('filter-to').value=todayISO();}if(['pendiente','sin-fecha','por-continuar'].includes(key))document.getElementById('filter-state').value=key;if(key==='sin-facturar')document.getElementById('filter-payment').value=key;document.getElementById('search-all').dataset.urgente=key==='urgentes'?'1':'';renderBusqueda();document.querySelector('.search-panel').scrollIntoView({behavior:'smooth'});});
  document.getElementById('home-today').innerHTML=today.sort(ordenHora).map(a=>`<button class="today-row" data-open="${escapeHtml(a.id)}"><span class="today-time">${escapeHtml(a.hora||'—')}</span><span><strong>${escapeHtml(a.cliente)}</strong><small>${escapeHtml(a.operario||'Sin asignar')} · Nº ${escapeHtml(a.numero||'—')}</small></span><span class="badge ${a.estado}">${a.estado==='asignado'?'Asignado':'Pendiente'}</span></button>`).join('')||'<p>Sin trabajos pendientes para hoy.</p>';
  document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>abrirParte(b.dataset.open));
  const select=document.getElementById('filter-worker'),selected=select.value;
@@ -2730,7 +2735,7 @@ function limpiarFiltros(){for(const id of ['search-all','filter-worker','filter-
 function filtrarPartes(list,f){const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const q=norm(f.q).trim();return list.filter(a=>{
  const text=norm([a.cliente,a.telefonoCliente,a.direccion,a.trabajo,a.numero,a.operario].join(' '));const tel=String(a.telefonoCliente||'').replace(/\D/g,'');const qtel=q.replace(/\D/g,'');
  if(q&&!text.includes(q)&&!(qtel.length>=3&&/^[+\d\s()-]+$/.test(q)&&tel.includes(qtel)))return false;
- if(f.worker&&!operariosDe(a).includes(f.worker))return false;if(f.state==='sin-fecha'){if(a.fecha||a.estado==='terminado')return false;}else if(f.state&&a.estado!==f.state)return false;if(f.urgent&&(a.urgencia!=='alta'||a.estado==='terminado'))return false;
+ if(f.worker&&!operariosDe(a).includes(f.worker))return false;if(f.state==='por-continuar'){if(!a.pendienteContinuar||a.estado==='terminado')return false;}else if(f.state==='sin-fecha'){if(a.fecha||a.estado==='terminado')return false;}else if(f.state&&a.estado!==f.state)return false;if(f.urgent&&(a.urgencia!=='alta'||a.estado==='terminado'))return false;
  if(f.from&&(!a.fecha||a.fecha<f.from)||f.to&&(!a.fecha||a.fecha>f.to))return false;
  if(f.payment==='sin-facturar'&&(a.estado!=='terminado'||a.facturado))return false;if(f.payment==='facturado'&&!a.facturado)return false;
  if(f.payment&&!['sin-facturar','facturado'].includes(f.payment)&&a.estadoPago!==f.payment)return false;return true;
@@ -2774,7 +2779,7 @@ function montarFotos(a,context,readOnly=false){if(!a)return;const block=document
 function restaurarFirma(data){firmaTieneTrazo=false;if(!safeImage(data))return;const canvas=sigCanvas,ctx=sigCtx;const img=new Image();img.onload=()=>{if(canvas!==sigCanvas)return;ctx.drawImage(img,0,0,canvas.clientWidth,canvas.clientHeight);firmaTieneTrazo=true;};img.src=data;}
 async function generarYGuardarPDFs(a){/* PDFs are generated on demand, not embedded into Firestore documents. */}
 async function renderizarHojaOculta(a,tipo){const node=await legacy_renderizarHojaOculta(a,tipo);try{await Promise.all(Array.from(node.querySelectorAll('img')).map(img=>img.complete?Promise.resolve():new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('No se pudo cargar una imagen del parte.'));})));return node;}catch(e){node.remove();throw e;}}
-function buildParteHTML(a,tipo){const safe=clone(a);if(!safeImage(safe.firma))safe.firma=null;const html=legacy_buildParteHTML(safe,tipo);const photos=(safe.fotos||[]).filter(p=>safeImage(p.data)).map(p=>`<figure><figcaption>${p.tipo==='antes'?'Antes':'Después'}</figcaption><img src="${p.data}" alt="Foto del trabajo"></figure>`).join('');return html+(photos?'<div class="bloque pdf-photos"><div class="lab">Fotografías del trabajo</div>'+photos+'</div>':'');}
+function buildParteHTML(a,tipo){const safe=clone(a);if(safe.pendienteContinuar&&safe.estado!=='terminado')safe.firma=null;if(!safeImage(safe.firma))safe.firma=null;const html=legacy_buildParteHTML(safe,tipo);const photos=(safe.fotos||[]).filter(p=>safeImage(p.data)).map(p=>`<figure><figcaption>${p.tipo==='antes'?'Antes':'Después'}</figcaption><img src="${p.data}" alt="Foto del trabajo"></figure>`).join('');return html+(photos?'<div class="bloque pdf-photos"><div class="lab">Fotografías del trabajo</div>'+photos+'</div>':'');}
 async function compartirPDF(a,tipo){setEstado('Preparando PDF…','saving');try{const blob=await generarPDFBlob(a,tipo);const file=new File([blob],`parte-${a.numero||a.id}-${tipo}.pdf`,{type:'application/pdf'});if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'Parte Nº'+(a.numero||'')});}catch(e){if(e.name!=='AbortError')throw e;}}else descargarBlob(blob,file.name);setEstado('PDF preparado');}catch(e){setEstado('No se pudo preparar el PDF. Comprueba la conexión y vuelve a intentarlo.','error');throw e;}}
 function descargarBlob(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 
@@ -2821,7 +2826,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 // Startup is called after the folder and work-schedule extensions initialize.
 
 // Undated work is deliberately not scheduled for today.
-function cardHtml(a){const html=legacy_cardHtml(a);return pendienteDeAgendar(a)?html.replace('<div class="meta">','<div class="meta"><span class="badge sin-fecha">📅 Pendiente de agendar</span>'):html;}
+function cardHtml(a){const html=legacy_cardHtml(a).replace(estadoLabel(a.estado),estadoTexto(a));return pendienteDeAgendar(a)?html.replace('<div class="meta">','<div class="meta"><span class="badge sin-fecha">📅 Pendiente de agendar</span>'):html;}
 function renderCalendario(){legacy_renderCalendario();const pending=AVISOS.filter(a=>!a.fecha&&a.estado!=='terminado');if(!pending.length)return;const area=document.createElement('section');area.className='undated-panel';area.innerHTML='<h3>📅 Pendiente de agendar</h3><p>Estos trabajos aún no están programados en la agenda.</p>'+pending.map(cardHtml).join('');document.getElementById('cal-contenido').append(area);area.querySelectorAll('.card').forEach(c=>c.onclick=e=>{if(!e.target.closest('a'))openDetalle(c.dataset.id);});}
 
 // The browser can only suggest missing time entries while an administrator has the app open.
@@ -2877,7 +2882,7 @@ async function sincronizarCarpetaLocal(){
       else if(a.estado==='terminado' && a.estadoPago==='facturar') carpeta = '03_Pendientes_de_facturar';
       else if(a.estado==='terminado') carpeta = '02_Finalizados';
       const limpio = String(a.cliente||'cliente').replace(/[^a-z0-9áéíóúüñ _-]/gi,'').trim().replace(/\s+/g,'-');
-      const blobCliente = a.pdfCliente ? base64ToBlob(a.pdfCliente) : await generarPDFBlob(a,'cliente');
+      const blobCliente = a.pdfCliente && !a.pendienteContinuar ? base64ToBlob(a.pdfCliente) : await generarPDFBlob(a,'cliente');
       const archivoCliente = await carpetas[carpeta].getFileHandle(`Parte-${a.numero}-${limpio}-cliente.pdf`,{create:true});
       const writerCliente = await archivoCliente.createWritable();
       await writerCliente.write(blobCliente); await writerCliente.close(); guardados++;
@@ -2957,7 +2962,7 @@ async function guardarAgenda(a,fecha,hora){
 function montarAgendaDetalle(a){
  const fecha=document.getElementById('d-fecha'),hora=document.getElementById('d-hora'),btn=document.getElementById('d-sin-fecha'),status=document.getElementById('d-agenda-status');
  let ocupado=false;
- function refrescar(){fecha.value=a.fecha||'';hora.value=a.fecha?(a.hora||''):'';fecha.disabled=ocupado||!esAdmin();hora.disabled=ocupado||!esAdmin()||!a.fecha;btn.hidden=!esAdmin();btn.disabled=ocupado;status.textContent=a.fecha?'Fecha prevista: '+fmtDate(a.fecha):'Pendiente de agendar · aún no hay fecha de visita.';document.getElementById('d-resumen').textContent=estadoLabel(a.estado)+' · '+urgLabel(a.urgencia)+' · '+(a.fecha?fmtDate(a.fecha):'Pendiente de agendar');}
+ function refrescar(){fecha.value=a.fecha||'';hora.value=a.fecha?(a.hora||''):'';fecha.disabled=ocupado||!esAdmin();hora.disabled=ocupado||!esAdmin()||!a.fecha;btn.hidden=!esAdmin();btn.disabled=ocupado;status.textContent=a.fecha?'Fecha prevista: '+fmtDate(a.fecha):'Pendiente de agendar · aún no hay fecha de visita.';document.getElementById('d-resumen').textContent=estadoTexto(a)+' · '+urgLabel(a.urgencia)+' · '+(a.fecha?fmtDate(a.fecha):'Pendiente de agendar');}
  async function guardar(f,h){
   if(ocupado)return;
   ocupado=true;refrescar();
@@ -2970,6 +2975,41 @@ function montarAgendaDetalle(a){
  btn.onclick=()=>guardar('','');
  refrescar();
 }
+
+function estadoTexto(a){return a.pendienteContinuar&&a.estado!=='terminado'?'↩ Pendiente de continuar':estadoLabel(a.estado);}
+function puedeReabrir(a){return !!a&&!!usuarioActual&&(esAdmin()||operariosDe(a).includes(usuarioActual.nombre));}
+async function volverAPendiente(source,nota=''){
+ const a=clone(source);Object.defineProperty(a,'__base',{value:source.__base||clone(source),writable:true});
+ if(!puedeReabrir(a))throw Error('Solo el operario asignado o administración puede devolver este trabajo a pendientes.');
+ const fecha=new Date().toISOString();
+ if(a.estado==='terminado')a.historialReaperturas=[...(a.historialReaperturas||[]),{fecha,por:usuarioActual.nombre,terminadoEn:a.terminadoEn||null,firma:a.firma||null}];
+ a.estado=operariosDe(a).length?'asignado':'pendiente';a.pendienteContinuar=true;a.terminadoEn=null;a.fecha='';a.hora='';
+ a.notasHistorial=[...(a.notasHistorial||[]),{fecha,texto:'Trabajo pendiente de continuar'+(nota.trim()?': '+nota.trim():'.')+' · '+usuarioActual.nombre}];
+ await guardarAviso(a);return a;
+}
+function montarVolverPendiente(id,recoger=null){
+ const a=copiaEditable(id);if(!puedeReabrir(a))return;
+ const btn=document.createElement('button');btn.type='button';btn.className='btn btn-outline';btn.id='btn-volver-pendiente';btn.textContent='↩ Volver a pendiente';btn.style.marginTop='16px';
+ btn.onclick=()=>{
+  if(recoger)recoger(a);
+  const nota=document.getElementById('d-nota-nueva')?.value||'';
+  openOverlay(`<h2>Volver a pendiente</h2><p>El trabajo quedará como <strong>Pendiente de continuar</strong>, sin fecha de próxima visita. Se conservan el operario, las notas, las fotos, las horas y los materiales.</p><label for="continuar-nota">¿Qué queda por hacer? (opcional)</label><textarea id="continuar-nota" placeholder="Falta una pieza, volver a revisar…">${escapeHtml(nota)}</textarea><button class="btn btn-primary" id="continuar-guardar">Guardar como pendiente</button><button class="btn btn-outline" id="continuar-cancelar">Cancelar</button>`);
+  document.getElementById('continuar-cancelar').onclick=()=>abrirParte(id);
+  document.getElementById('continuar-guardar').onclick=async e=>{const b=e.currentTarget;b.disabled=true;try{await volverAPendiente(a,document.getElementById('continuar-nota').value);closeOverlay();navegar('pendientes');mostrarToast('Parte pendiente de continuar');}catch(err){errorOperacion(err);b.disabled=false;}};
+ };
+ document.getElementById('sheet').append(btn);
+}
+const detalleContinuar=openDetalle,realizadoContinuar=openParteRealizado,archivadoContinuar=openParteArchivado;
+openDetalle=function(id){detalleContinuar(id);montarVolverPendiente(id);};
+openParteRealizado=function(id){realizadoContinuar(id);montarVolverPendiente(id);};
+openParteArchivado=function(id){archivadoContinuar(id);montarVolverPendiente(id);};
+const firmaContinuar=openFirma;
+openFirma=function(id){firmaContinuar(id);montarVolverPendiente(id,a=>{
+ leerMatList();a.horas=parseFloat(document.getElementById('f-horas').value)||0;
+ a.horaTrabajoIni=document.getElementById('f-hora-ini').value;a.horaTrabajoFin=document.getElementById('f-hora-fin').value;
+ a.materiales=materialesTmp.filter(m=>m.nombre.trim()).map(m=>({nombre:m.nombre,cantidad:m.cantidad,precio:m.precio!==undefined&&m.precio!==''&&m.precio!==null?parseFloat(String(m.precio).replace(',','.')):null}));
+ a.notasFinal=document.getElementById('f-notas').value.trim();a.observacionesFactura=document.getElementById('f-obs-factura').value.trim();a.emailCliente=document.getElementById('f-email').value.trim();
+});};
 
 iniciarV2();
 
