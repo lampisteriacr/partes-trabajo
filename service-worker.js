@@ -1,4 +1,4 @@
-const CACHE='lampisteria-cr-shell-v2-20260922-agenda';
+const CACHE='lampisteria-cr-shell-v2-20260922-session24';
 const CORE=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 const scope=new URL(self.registration.scope);
 const LIBRARIES=['firebase-app.js','firebase-auth.js','firebase-firestore.js'].map(file=>'https://www.gstatic.com/firebasejs/10.12.2/'+file).concat(['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js']);
