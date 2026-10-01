@@ -2811,10 +2811,26 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.1.14', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.1.15', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
-const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function equal(a,b){
+ if(a===b)return true;
+ if(a==null||b==null||typeof a!=='object'||typeof b!=='object')return false;
+ if(Array.isArray(a)!==Array.isArray(b))return false;
+ if(Array.isArray(a))return a.length===b.length&&a.every((v,i)=>equal(v,b[i]));
+ const ak=Object.keys(a),bk=Object.keys(b);
+ return ak.length===bk.length&&ak.every(k=>Object.hasOwn(b,k)&&equal(a[k],b[k]));
+}
+function fusionarNotas(base,local,remote){
+ if(![base,local,remote].every(Array.isArray))return null;
+ const identity=n=>n.id?'id:'+n.id:'legacy:'+JSON.stringify([n.fecha,n.texto]);
+ const lm=new Map(local.map(n=>[identity(n),n])),rm=new Map(remote.map(n=>[identity(n),n]));
+ if(base.some(n=>!equal(n,lm.get(identity(n)))||!equal(n,rm.get(identity(n)))))return null;
+ const merged=remote.map(n=>clone(n));
+ for(const n of local){const found=rm.get(identity(n));if(found){if(!equal(n,found))return null;}else{merged.push(clone(n));rm.set(identity(n),n);}}
+ return merged;
+}
 const safeImage=x=>typeof x==='string' && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(x);
 const horaAhora=()=>new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',hour12:false});
 function fechaLocal(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
@@ -2882,9 +2898,15 @@ async function guardarAviso(a){
    const remote=remoteSnap.exists()?remoteSnap.data():null;
    if(!base&&remote)return remote; // Idempotent retry after an ambiguous acknowledgement.
    if(remote?.eliminadoEn&&!Object.hasOwn(patch,'eliminadoEn'))throw Error('Este parte está en la papelera. Administración puede recuperarlo.');
-   if(base&&remote){for(const key of Object.keys(patch)){if(!equal(base[key],remote[key])&&!equal(patch[key],remote[key]))throw Error('Otra persona ha cambiado este parte. Tu edición queda como borrador; vuelve a abrir el parte para revisar los cambios.');}}
+   const appliedPatch={...patch};
+   if(base&&remote){for(const key of Object.keys(patch)){
+    if(!equal(base[key],remote[key])&&!equal(patch[key],remote[key])){
+     if(key==='notasHistorial'){const merged=fusionarNotas(base[key]||[],patch[key]||[],remote[key]||[]);if(merged){appliedPatch[key]=merged;continue;}}
+     throw Error('Este dato ha cambiado en otro dispositivo: '+key+'. Tu edición queda como borrador; vuelve a abrir el parte para revisar los cambios.');
+    }
+   }}
    if(base&&!remote&&!base.__legacy)throw Error('El parte ya no está disponible. Tu edición se conserva como borrador.');
-   let next={...(remote||snapshot),...patch};delete next.__legacy;
+   let next={...(remote||snapshot),...appliedPatch};delete next.__legacy;
    if(!base&&!remote){
     const counterRef=doc(window.fsDb,'kv','numero-parte-v2'),counterSnap=await tx.get(counterRef);
     const max=TODOS_AVISOS.reduce((n,x)=>Math.max(n,/^\d+$/.test(x.numero||'')?Number(x.numero):0),0);
