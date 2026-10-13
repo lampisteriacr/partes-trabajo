@@ -1567,10 +1567,7 @@ function renderOpGrid(a){
       const yaAsignado = sel.includes(op);
       if(!yaAsignado){
         const choque = buscarChoque(a, op);
-        if(choque&&!esAdmin()){
-          alert('⚠️ No se puede asignar: ' + choque);
-          return;
-        }
+        // Coincidences are advisory; guardarAviso enforces assignment permissions.
       }
       if(yaAsignado){
         sel = sel.filter(x=>x!==op);
@@ -2813,7 +2810,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.1.21', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.1.22', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
