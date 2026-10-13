@@ -1557,8 +1557,9 @@ function renderOpGrid(a){
   const seleccionados = operariosDe(a);
   grid.innerHTML = OPERARIOS.map(op=>{
     const ocupado = !seleccionados.includes(op) && !!buscarChoque(a, op);
-    return `<button class="op-btn ${seleccionados.includes(op)?'active':''} ${ocupado?'ocupado':''}" data-op="${escapeHtml(op)}">${seleccionados.includes(op)?'✓ ':''}${escapeHtml(op)}${ocupado?' 🔒':''}</button>`;
+    return `<button class="op-btn ${seleccionados.includes(op)?'active':''} ${ocupado?'ocupado':''}" data-op="${escapeHtml(op)}">${seleccionados.includes(op)?'✓ ':''}${escapeHtml(op)}${ocupado?(esAdmin()?' ⚠️':' 🔒'):''}</button>`;
   }).join('');
+  if(esAdmin()){const avisos=OPERARIOS.map(op=>buscarChoque(a,op)).filter(Boolean);if(avisos.length)grid.insertAdjacentHTML('beforeend','<p role="status" style="grid-column:1/-1;font-size:13px;line-height:1.5">⚠️ Puedes asignar igualmente para organizar el orden o un refuerzo.<br>'+avisos.map(escapeHtml).join('<br>')+'</p>');}
   grid.querySelectorAll('.op-btn').forEach(b=>{
     b.addEventListener('click', async ()=>{
       let sel = operariosDe(a);
@@ -1566,7 +1567,7 @@ function renderOpGrid(a){
       const yaAsignado = sel.includes(op);
       if(!yaAsignado){
         const choque = buscarChoque(a, op);
-        if(choque){
+        if(choque&&!esAdmin()){
           alert('⚠️ No se puede asignar: ' + choque);
           return;
         }
@@ -2812,7 +2813,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.1.20', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.1.21', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
