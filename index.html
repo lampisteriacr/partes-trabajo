@@ -634,7 +634,7 @@ body:has(#login-gate:not(.hidden)) main,body:has(#login-gate:not(.hidden)) .tabb
   <button class="tab-btn" data-view="fichar"><span class="ic">🕐</span>Fichar</button>
   <button class="tab-btn" data-view="clientes"><span class="ic">👤</span>Clientes</button>
   <button class="tab-btn" data-view="actividad" hidden><span class="ic">📆</span>Trabajos diarios</button>
-  <button class="tab-btn" data-view="gestion" hidden><span class="ic">📝</span>Gestión</button>
+  <button class="tab-btn" data-view="gestion" hidden><span class="ic">🔎</span>Gestión</button>
   <button class="tab-btn" data-view="presupuestos" hidden><span class="ic">📝</span>Presupuestos</button>
   <button class="tab-btn" data-view="archivo" id="tab-archivo" style="display:none"><span class="ic">🗄️</span>Archivo</button>
 </nav>
@@ -2812,7 +2812,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.2.3', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.2.4', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
