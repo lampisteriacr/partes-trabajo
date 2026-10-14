@@ -1334,7 +1334,7 @@ function openDetalle(id){
       <input type="text" id="d-direccion-calle" placeholder="Calle y número" value="${escapeHtml(a.direccionCalle||a.direccion||'')}" style="width:100%;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;" autocomplete="off">
       <div id="d-direccion-estado" style="font-size:12px;color:var(--text-soft);margin-top:4px;"></div>
       <div id="d-direccion-sugerencias" class="sugerencias"></div>
-      <input type="text" id="d-piso" placeholder="Piso / puerta (opcional)" value="${escapeHtml((a.direccion && a.direccionCalle && a.direccion.startsWith(a.direccionCalle+', ')) ? a.direccion.slice(a.direccionCalle.length+2) : '')}" style="width:100%;margin-top:8px;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
+      <input type="text" id="d-piso" placeholder="Piso / puerta (opcional)" value="${escapeHtml(a.direccionPiso!=null?a.direccionPiso:((a.direccion && a.direccionCalle && a.direccion.startsWith(a.direccionCalle+', ')) ? a.direccion.slice(a.direccionCalle.length+2) : ''))}" style="width:100%;margin-top:8px;padding:11px 12px;border:1.5px solid var(--paper-line);border-radius:6px;font-size:15px;background:#fff;">
       <button class="btn btn-outline" id="d-guardar-direccion" style="margin-top:8px">Guardar dirección</button>
     </div>
 
@@ -1453,6 +1453,7 @@ function openDetalle(id){
     const piso = document.getElementById('d-piso').value.trim();
     if(!calle){ alert('Pon al menos la calle y número.'); return; }
     a.direccionCalle = calle;
+    a.direccionPiso = piso;
     a.direccion = piso ? `${calle}, ${piso}` : calle;
     await guardarAviso(a);
     renderPendientes(); renderCalendario(); renderRealizados(); renderArchivo();
@@ -2812,7 +2813,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.2.4', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.2.5', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
@@ -2862,7 +2863,7 @@ function validarAviso(a){
  for(const k of ['cliente','trabajo'])if(typeof a[k]!=='string'||!a[k].trim())throw Error('Falta el cliente o la descripción del trabajo.');
  if(!['pendiente','asignado','terminado'].includes(a.estado))throw Error('Estado del parte no válido.');
  if(!['alta','media','baja'].includes(a.urgencia))throw Error('Urgencia no válida.');
- for(const k of ['numero','direccion','direccionCalle','telefono','telefonoCliente','operario','emailCliente','notasFinal','observacionesFactura','creadoEn','terminadoEn','eliminadoEn','actualizadoEn','actualizadoPor'])if(a[k]!=null&&typeof a[k]!=='string')throw Error('Campo no válido: '+k);
+ for(const k of ['numero','direccion','direccionCalle','direccionPiso','telefono','telefonoCliente','operario','emailCliente','notasFinal','observacionesFactura','creadoEn','terminadoEn','eliminadoEn','actualizadoEn','actualizadoPor'])if(a[k]!=null&&typeof a[k]!=='string')throw Error('Campo no válido: '+k);
  if(a.numero&&!/^[0-9A-Za-z-]+$/.test(a.numero))throw Error('Número no válido.');
  if(a.tipoParte!=null&&!['trabajo','presupuesto'].includes(a.tipoParte))throw Error('Tipo de parte no válido.');
  if(a.presupuestoEstado!=null&&!['visita','preparar','esperando','aceptado','rechazado'].includes(a.presupuestoEstado))throw Error('Estado de presupuesto no válido.');
@@ -2984,7 +2985,7 @@ async function restaurarFormulario(){if(!esAdmin())return;const data=await local
 async function crearAvisoV2(compartir=false){
  if(createBusy)return;exigirAdmin();const fields=formValues();const cliente=fields['f-cliente'].trim(),trabajo=fields['f-trabajo'].trim(),telefonoCliente=fields['f-telefono-cliente'].trim();if(!cliente||!trabajo){alert('Falta el cliente o la descripción del trabajo.');return;}if(!telefonoCliente){alert('El teléfono del cliente es obligatorio.');document.getElementById('f-telefono-cliente').focus();return;}
  createBusy=true;const botones=[document.getElementById('btn-crear'),document.getElementById('btn-crear-wa')];const btn=botones[compartir?1:0];botones.forEach(b=>b.disabled=true);btn.textContent='Guardando parte…';let wa=null;
- const aviso={id:formDraftId||(formDraftId=uid()),numero:'',cliente,trabajo,telefono:fields['f-telefono'].trim(),telefonoCliente,direccion:direccionCompleta(),direccionCalle:fields['f-direccion'].trim(),fecha:fields['f-fecha'],hora:fields['f-fecha']?fields['f-hora']:'',urgencia:urgenciaActual,estado:fields['f-tipo']==='presupuesto'?'asignado':'pendiente',operario:fields['f-tipo']==='presupuesto'?'Christian Robles':'',tipoParte:fields['f-tipo']==='presupuesto'?'presupuesto':'trabajo',...(fields['f-tipo']==='presupuesto'?{presupuestoEstado:'visita'}:{}),firma:null,horas:null,materiales:[],duracion:null,creadoEn:new Date().toISOString()};
+ const aviso={id:formDraftId||(formDraftId=uid()),numero:'',cliente,trabajo,telefono:fields['f-telefono'].trim(),telefonoCliente,direccion:direccionCompleta(),direccionCalle:fields['f-direccion'].trim(),direccionPiso:fields['f-piso'].trim(),fecha:fields['f-fecha'],hora:fields['f-fecha']?fields['f-hora']:'',urgencia:urgenciaActual,estado:fields['f-tipo']==='presupuesto'?'asignado':'pendiente',operario:fields['f-tipo']==='presupuesto'?'Christian Robles':'',tipoParte:fields['f-tipo']==='presupuesto'?'presupuesto':'trabajo',...(fields['f-tipo']==='presupuesto'?{presupuestoEstado:'visita'}:{}),firma:null,horas:null,materiales:[],duracion:null,creadoEn:new Date().toISOString()};
  // Reserve the window during the tap: after an await iPhone can block it.
  try{exigirOnline();if(compartir){try{wa=window.open('about:blank','_blank');}catch{}}guardarBorradorFormulario();await draftQueue;await guardarAviso(aviso);
   await localDelete(draftKey()).catch(()=>{});formDraftId=null;restoringDraft=true;FORM_FIELDS.forEach(id=>document.getElementById(id).value='');restoringDraft=false;sincronizarAgendaNueva();document.getElementById('draft-status').textContent='';document.getElementById('direccion-sugerencias').innerHTML='';mostrarToast('Aviso Nº'+aviso.numero+' guardado');navegar('pendientes');
@@ -3486,6 +3487,11 @@ function montarFacturaClara(id){const a=copiaEditable(id),sheet=document.getElem
 const detalleAntesFactura=openDetalle;openDetalle=function(id){detalleAntesFactura(id);montarFacturaClara(id);};
 const realizadoAntesFactura=openParteRealizado;openParteRealizado=function(id){realizadoAntesFactura(id);montarFacturaClara(id);};
 const archivadoAntesFactura=openParteArchivado;openParteArchivado=function(id){archivadoAntesFactura(id);montarFacturaClara(id);};
+function datosCliente(a){const calle=String(a.direccionCalle||'').trim(),direccion=String(a.direccion||'').trim();let piso=typeof a.direccionPiso==='string'?a.direccionPiso.trim():'';if(a.direccionPiso==null&&calle&&direccion.startsWith(calle+', '))piso=direccion.slice(calle.length+2).trim();return {nombre:a.cliente||'',telefono:a.telefonoCliente||'',calle:calle||direccion,piso,direccion};}
+function datosClienteHTML(a){const d=datosCliente(a);return '<p><strong>Nombre:</strong> '+escapeHtml(d.nombre)+'</p><p><strong>Teléfono:</strong> '+escapeHtml(d.telefono||'Sin teléfono registrado')+'</p><p><strong>Calle:</strong> '+escapeHtml(d.calle||'Sin dirección registrada')+'</p><p><strong>Piso / puerta:</strong> '+escapeHtml(d.piso||'Sin piso registrado')+'</p>';}
+const clientesAntesDatos=renderClientes;renderClientes=function(){clientesAntesDatos();if(!esAdmin())return;document.querySelectorAll('#lista-clientes [data-clave]').forEach(card=>{const partes=AVISOS.filter(a=>claveCliente(a)===card.dataset.clave).sort((a,b)=>(b.fecha||b.creadoEn||'').localeCompare(a.fecha||a.creadoEn||''));if(!partes.length)return;const line=card.querySelector('.trabajo');if(line)line.innerHTML=datosClienteHTML(partes[0]);});};
+function rellenarNuevoCliente(a){if(!esAdmin())return;const fields=['f-cliente','f-telefono-cliente','f-direccion','f-piso','f-trabajo'];if(fields.some(id=>document.getElementById(id).value.trim())){mostrarToast('Ya hay un borrador en Nuevo. Guárdalo o revísalo antes de reutilizar el cliente.');return;}const d=datosCliente(a);closeOverlay();navegar('nuevo');for(const [id,value]of [['f-cliente',d.nombre],['f-telefono-cliente',d.telefono],['f-direccion',d.calle],['f-piso',d.piso]])document.getElementById(id).value=value;guardarBorradorFormulario();document.getElementById('f-trabajo').focus();mostrarToast('Cliente y dirección preparados. Completa el trabajo.');}
+const fichaAntesDatos=openFichaCliente;openFichaCliente=function(clave){fichaAntesDatos(clave);if(!esAdmin())return;const partes=AVISOS.filter(a=>claveCliente(a)===clave).sort((a,b)=>(b.fecha||b.creadoEn||'').localeCompare(a.fecha||a.creadoEn||''));if(!partes.length)return;const ubicaciones=[];const seen=new Set();for(const a of partes){const d=datosCliente(a),key=[d.calle,d.piso].join('|');if(seen.has(key))continue;seen.add(key);ubicaciones.push(a);}const panel=document.createElement('section');panel.className='actividad-card';panel.innerHTML='<h3>Datos del cliente</h3>'+(ubicaciones.length>1?'<label>Dirección del trabajo<select id="cliente-ubicacion">'+ubicaciones.map((a,i)=>'<option value="'+i+'">'+escapeHtml(datosCliente(a).calle)+(datosCliente(a).piso?' · '+escapeHtml(datosCliente(a).piso):'')+'</option>').join('')+'</select></label>':'')+'<div id="cliente-datos"></div><button class="btn btn-primary" id="cliente-nuevo">Nuevo parte para este cliente</button>';document.getElementById('sheet').querySelector('h2').insertAdjacentElement('afterend',panel);let seleccionado=0;const draw=()=>panel.querySelector('#cliente-datos').innerHTML=datosClienteHTML(ubicaciones[seleccionado]);draw();const select=panel.querySelector('#cliente-ubicacion');if(select)select.onchange=()=>{seleccionado=Number(select.value);draw();};panel.querySelector('#cliente-nuevo').onclick=()=>rellenarNuevoCliente(ubicaciones[seleccionado]);};
 
 iniciarV2();
 
