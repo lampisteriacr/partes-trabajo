@@ -2826,7 +2826,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.3.13', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.3.14', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
@@ -3786,9 +3786,53 @@ dibujarJornadaMes=function(){dibujarAntesDocumentoJornada();const host=document.
 const visualizarAntesDocumentoJornada=visualizarInformeJornada;
 visualizarInformeJornada=async function(){exigirAdmin();try{await cargarEmpresaDocumentoJornada();visualizarAntesDocumentoJornada();}catch(e){mostrarToast('No se pudo preparar el documento. '+e.message);}};
 
+// Notas internas separadas del parte: no se incluyen en resúmenes ni PDF del cliente.
+function puedeAnotarPresupuesto(){return !!usuarioActual&&usuarioActual.activo!==false&&(esAdmin()||usuarioActual.nombre==='Christian Robles');}
+function claveNotasVisita(a){return a.fecha||'sin-fecha';}
+function exigirNotasPresupuesto(){if(!puedeAnotarPresupuesto())throw Error('Las notas de presupuesto corresponden a Greis y Christian.');}
+async function cargarNotasVisitaPresupuesto(id){
+ exigirNotasPresupuesto();exigirOnline();const who=usuarioActual.id;
+ const [parte,snap]=await Promise.all([getDocFromServer(doc(window.fsDb,'avisos',id)),getDocFromServer(doc(window.fsDb,'kv','presupuesto-notas-visita-'+id))]);
+ exigirNotasPresupuesto();if(usuarioActual.id!==who)throw Error('La sesión ha cambiado. Vuelve a abrir el presupuesto.');
+ if(!parte.exists()||!esPresupuesto(parte.data())||parte.data().eliminadoEn)throw Error('Este presupuesto ya no está disponible.');
+ return snap.exists()?clone(snap.data().visitas||[]):[];
+}
+async function guardarNotasVisitaPresupuesto(id,clave,texto,base){
+ exigirNotasPresupuesto();exigirOnline();if(typeof texto!=='string'||texto.length>12000)throw Error('La nota admite hasta 12.000 caracteres.');
+ const who=usuarioActual.id,por=usuarioActual.nombre;
+ return runTransaction(window.fsDb,async tx=>{
+  exigirNotasPresupuesto();if(usuarioActual.id!==who)throw Error('La sesión ha cambiado. Vuelve a abrir el presupuesto.');
+  const pref=doc(window.fsDb,'avisos',id),ref=doc(window.fsDb,'kv','presupuesto-notas-visita-'+id),parte=await tx.get(pref),snap=await tx.get(ref);
+  if(!parte.exists()||!esPresupuesto(parte.data())||parte.data().eliminadoEn)throw Error('Este presupuesto ya no está disponible.');
+  if(claveNotasVisita(parte.data())!==clave)throw Error('La fecha de visita ha cambiado. Copia tu nota y vuelve a abrir la visita.');
+  const data=snap.exists()?snap.data():{},visitas=clone(data.visitas||[]),index=visitas.findIndex(v=>v.clave===clave),anterior=index<0?'':visitas[index].texto;
+  if(anterior!==base&&anterior!==texto)throw Error('Hay una nota más reciente. Copia tu texto y pulsa «Cargar notas guardadas» para revisarla.');
+  if(anterior===texto)return visitas;
+  const row={clave,fecha:parte.data().fecha||'',texto,actualizadoEn:new Date().toISOString(),por};
+  if(index<0)visitas.push(row);else visitas[index]=row;
+  tx.set(ref,{...data,presupuestoId:id,visitas});return visitas;
+ });
+}
+function montarNotasVisitaPresupuesto(id){
+ if(!puedeAnotarPresupuesto())return;const a=TODOS_AVISOS.find(x=>x.id===id),sheet=document.getElementById('sheet');
+ if(!a||!esPresupuesto(a)||a.eliminadoEn||!sheet?.querySelector('h2')||sheet.querySelector('#presupuesto-notas-visita'))return;
+ const clave=claveNotasVisita(a),who=usuarioActual.id,panel=document.createElement('section');panel.className='actividad-card';panel.id='presupuesto-notas-visita';
+ panel.innerHTML='<h3>📝 Notas para preparar el presupuesto</h3><p class="small-note">Opcional · Greis y Christian · '+escapeHtml(a.fecha?'Visita del '+fmtDate(a.fecha):'Visita pendiente de fecha')+'</p><label for="presupuesto-nota-visita-texto">¿Qué debemos tener en cuenta?</label><textarea id="presupuesto-nota-visita-texto" rows="5" maxlength="12000" placeholder="Medidas, materiales, acceso, detalles que ha pedido el cliente…" disabled style="display:block;width:100%;min-height:130px;margin:10px 0"></textarea><button type="button" class="btn btn-primary" id="presupuesto-nota-visita-guardar" disabled>Guardar nota</button> <button type="button" class="btn btn-outline" id="presupuesto-nota-visita-cargar">Cargar notas guardadas</button><p role="status" id="presupuesto-nota-visita-status">Cargando notas…</p><div id="presupuesto-notas-visita-anteriores"></div>';
+ sheet.querySelector('h2').after(panel);
+ const input=panel.querySelector('textarea'),save=panel.querySelector('#presupuesto-nota-visita-guardar'),reload=panel.querySelector('#presupuesto-nota-visita-cargar'),status=panel.querySelector('[role=status]');let base='',loaded=false;
+ const vigente=()=>panel.isConnected&&puedeAnotarPresupuesto()&&usuarioActual.id===who;
+ const draw=visitas=>{const current=visitas.find(v=>v.clave===clave);base=current?.texto||'';input.value=base;input.disabled=false;save.disabled=false;loaded=true;status.textContent=current?'Guardado por '+current.por+' · '+new Date(current.actualizadoEn).toLocaleString('es-ES'):'Puedes dejar la nota vacía.';
+  const anteriores=visitas.filter(v=>v.clave!==clave&&v.texto);panel.querySelector('#presupuesto-notas-visita-anteriores').innerHTML=anteriores.length?'<details><summary>Notas de otras visitas · '+anteriores.length+'</summary>'+anteriores.map(v=>'<article><strong>'+escapeHtml(v.fecha?fmtDate(v.fecha):'Sin fecha')+'</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+escapeHtml(v.texto)+'</p><small>'+escapeHtml(v.por)+'</small></article>').join('')+'</details>':'';
+ };
+ const load=async()=>{if(loaded&&input.value!==base&&!window.confirm('Hay cambios sin guardar. ¿Cargar las notas guardadas y sustituir este borrador?'))return;reload.disabled=true;save.disabled=true;status.textContent='Cargando notas…';try{const visitas=await cargarNotasVisitaPresupuesto(id);if(vigente())draw(visitas);}catch(e){if(vigente()){status.textContent=e.message;save.disabled=!loaded;}}finally{if(vigente())reload.disabled=false;}};
+ input.oninput=()=>{status.textContent='Cambios pendientes de guardar';};
+ save.onclick=async()=>{if(!loaded||!vigente())return;save.disabled=true;reload.disabled=true;input.disabled=true;status.textContent='Guardando nota…';try{const visitas=await guardarNotasVisitaPresupuesto(id,clave,input.value,base);if(vigente()){draw(visitas);status.textContent='✓ Nota guardada para preparar el presupuesto.';}}catch(e){if(vigente())status.textContent=e.message;}finally{if(vigente()){input.disabled=false;save.disabled=false;reload.disabled=false;}}};
+ reload.onclick=load;void load();
+}
+const montarPresupuestoAntesNotasVisita=montarPresupuesto;
+montarPresupuesto=function(id){montarPresupuestoAntesNotasVisita(id);montarNotasVisitaPresupuesto(id);};
+
 iniciarV2();
-
-
 </script>
 </body>
 </html>
