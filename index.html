@@ -521,6 +521,8 @@ body:has(#login-gate:not(.hidden)) main,body:has(#login-gate:not(.hidden)) .tabb
 .pres-visitas-separadas{display:block}.pres-visitas-bloque{padding:18px;border:1px solid #dbe3d6;border-radius:14px;margin:0 0 20px;background:#fff}.pres-visitas-pendientes{border-top:4px solid #c38a21}.pres-visitas-agendadas{border-top:4px solid #3f7954}.pres-visitas-titulo{display:flex;align-items:center;gap:12px}.pres-visitas-titulo h4{font-size:21px;margin:0}.pres-visitas-titulo span{background:#edf2e8;border-radius:20px;padding:4px 12px;font-weight:700}.pres-visitas-ayuda{color:#586652;margin:6px 0 16px}
 
 .pres-resumen{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}.pres-visita-pendiente{--pres-color:#996414;--pres-soft:#fff3d9}.pres-visita-agendada{--pres-color:#286b58;--pres-soft:#e5f3ec}
+
+.pres-visita-pendiente{--pres-accent:#337596;--pres-tint:#edf7fd}.pres-visita-agendada{--pres-accent:#245e8b;--pres-tint:#d2e8f8}.tab-btn[data-view="calendario"]{background:#d9f1ff;color:#225e7c}.tab-btn[data-view="calendario"].active{background:#a9ddfa;color:#153f59;border-color:#4b9ccb}
 </style></head>
 <body>
 
@@ -2828,7 +2830,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.3.18', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.3.19', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
