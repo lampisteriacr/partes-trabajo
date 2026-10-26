@@ -2830,7 +2830,7 @@ window.addEventListener('storage',e=>{if(e.key===SESSION_KEY||e.key===null)compr
 let TODOS_AVISOS=[], datosListos=false, usuariosListos=false, firmaTieneTrazo=false;
 let unsubscribeAvisos=null, unsubscribeUsuarios=null, createBusy=false, formDraftId=null;
 let installEvent=null, dbPromise=null, starting=false, restoringDraft=false;
-const VERSION_APP='2.3.20', MAX_DOCUMENT_BYTES=900000;
+const VERSION_APP='2.3.21', MAX_DOCUMENT_BYTES=900000;
 const clone=x=>JSON.parse(JSON.stringify(x));
 const esAdmin=()=>usuarioActual?.rol==='admin' && usuarioActual.activo!==false;
 function equal(a,b){
@@ -3896,6 +3896,12 @@ const presupuestoAntesEditarNotas=montarPresupuesto;montarPresupuesto=function(i
 const notaAntesEditarNotas=guardarNotaTrabajo;guardarNotaTrabajo=async function(...args){await notaAntesEditarNotas(...args);setTimeout(()=>montarGestionNotasGuardadas(args[0]),0);};
 
 const resumenAntesGestionEditarNotas=resumenCompletoHTML;resumenCompletoHTML=function(a){const html=resumenAntesGestionEditarNotas(a);return puedeGestionar()?html.replace(/<h3>Notas de los operarios<\/h3>[\s\S]*?(?=<h3>Visitas, horas y materiales<\/h3>)/,''):html;};
+function montarPapeleraPresupuesto(id){
+ const a=copiaEditable(id),sheet=document.getElementById('sheet');if(!a||!esPresupuesto(a)||!esAdmin()||a.eliminadoEn||!sheet||sheet.querySelector('#pres-mover-papelera'))return;
+ const section=document.createElement('section');section.className='actividad-card';section.innerHTML='<button type="button" class="btn btn-danger" id="pres-mover-papelera">🗑️ Mover presupuesto a la papelera</button><p class="small-note">Podrás recuperarlo desde Archivo → Papelera. Se conservan sus notas y documentos.</p><p role="status" id="pres-papelera-status"></p>';
+ sheet.querySelector('h2').after(section);section.querySelector('button').onclick=async e=>{if(!confirm('¿Mover el presupuesto Nº '+(a.numero||'—')+' de '+(a.cliente||'este cliente')+' a la papelera? Podrás recuperarlo desde Archivo.'))return;const button=e.currentTarget;button.disabled=true;try{await eliminarAviso(id);closeOverlay();navegar('presupuestos');}catch(err){section.querySelector('[role=status]').textContent='No se ha movido: '+err.message;button.disabled=false;}};
+}
+const presupuestoAntesPapelera=montarPresupuesto;montarPresupuesto=function(id){presupuestoAntesPapelera(id);montarPapeleraPresupuesto(id);};
 
 iniciarV2();
 
